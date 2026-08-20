@@ -51,7 +51,7 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
 
 ## Tasks
 
-- [ ] 0.0 Create feature branch
+- [x] 0.0 Create feature branch
   - [x] 0.1 Create and checkout a new branch for this feature (`git checkout -b feature/image-batch`)
 - [ ] 1.0 Scaffold project (package.json, deps, folder layout, config, README)
   - [ ] 1.1 Initialize the project with pnpm: `package.json` with `"type": "module"`, `"engines": { "node": ">=24" }`, `packageManager` (pnpm), and scripts: `dev` (`node src/index.ts`), `start` (`node src/index.ts`), `check` (`tsc -p tsconfig.json`), `build` (`tsc -p tsconfig.build.json`), `test` (`vitest run --coverage`), `lint` (`eslint . --max-warnings 0`), `format` (`prettier --write .`), `format:check` (`prettier --check .`), `verify` (`pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build`). Create `.nvmrc` with `24`.
