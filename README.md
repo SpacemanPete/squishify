@@ -16,19 +16,22 @@ An interactive CLI that batch-processes a folder of images for a design → prod
 
 ## Requirements
 
-Node.js ≥ 18 (current LTS preferred).
+- Node.js 24 LTS (native TypeScript type stripping — no `tsx`).
+- pnpm.
 
 ## Install
 
 ```sh
-npm install
+pnpm install
 ```
 
 ## Usage
 
 ```sh
-npm start
+pnpm start
 ```
+
+> `start` is an alias for `dev` (`node src/index.ts`); see Scripts.
 
 ### Example run
 
@@ -70,19 +73,32 @@ No GUI, watch mode, cloud/CMS upload, pure-rename mode, ICC/color-profile handli
 
 | Script | Does |
 |---|---|
-| `npm start` | Run the interactive CLI (`tsx src/index.ts`) |
-| `npm run build` | Compile TypeScript (`tsc`) |
-| `npm test` | Run the test suite (Vitest) |
-| `npm run lint` | Lint (ESLint) |
+| `pnpm dev` | Run the interactive CLI directly (`node src/index.ts`) |
+| `pnpm start` | Alias for `dev` |
+| `pnpm check` | Typecheck (`tsc -p tsconfig.json`) |
+| `pnpm build` | Emit to `dist/` (`tsc -p tsconfig.build.json`) |
+| `pnpm test` | Run the test suite with coverage (Vitest) |
+| `pnpm lint` | Lint (ESLint, type-aware, `--max-warnings 0`) |
+| `pnpm format` | Format with Prettier |
+| `pnpm format:check` | Verify formatting |
+| `pnpm verify` | Aggregate gate: check + lint + format:check + test + build |
 
 ## Project layout
 
 ```
-src/index.ts     prompt flow + orchestration
-src/process.ts   resize, convert, quality-cap loop
-src/naming.ts    output filename + collision resolution
-src/*.test.ts    unit tests (colocated)
-tests/fixtures/  sample images for the end-to-end test
+src/index.ts       prompt flow + orchestration (shell)
+src/process.ts     resize, convert, quality-cap loop, temp-file writes (shell)
+src/naming.ts      output filename + collision resolution (pure)
+src/resize.ts      resize decision + dimension math (pure)
+src/quality.ts     quality-cap loop (pure)
+src/*.test.ts      unit tests (colocated)
+src/pipeline.test.ts  end-to-end smoke test
+tests/fixtures/    sample images for the end-to-end test
+dist/              build output (gitignored)
 ```
 
+Pure core modules (`naming.ts`, `resize.ts`, `quality.ts`) are the coverage-measured surface; `process.ts` and `index.ts` are thin shells over them.
+
 Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and [@clack/prompts](https://github.com/bombshell-dev/clack) for the prompt flow.
+
+This project follows the portfolio's Node + TypeScript house standard (`.agents/AGENTS-NODE.md`): Node 24, pnpm, ESM with on-disk `.ts` import extensions, functional core / imperative shell, and a `pnpm verify` quality gate.

@@ -112,7 +112,7 @@ As a developer with a page-weight budget, I want every image under a specific si
 - Batch watermarking, metadata stripping options, or EXIF handling beyond what libvips does by default.
 - GIF support (animated or first-frame) — GIFs are detected, logged, and skipped.
 - Multi-size output sets (e.g. thumb + full) in a single run — resize is one target per run.
-- Parallel/multicore scheduling tuning beyond what the image library does automatically.
+- Parallel/multicore scheduling tuning beyond what the image library does automatically — processing is sequential or a small bounded pool, not `Promise.all` over the whole folder.
 - Image deduplication or similarity detection.
 
 ---
@@ -124,6 +124,25 @@ As a developer with a page-weight budget, I want every image under a specific si
 - Use `@clack/prompts` for a polished, spinner-supported interactive flow (the user's other Node projects are prompt-friendly; keep dependencies minimal).
 - Use ANSI colors only where they aid readability; keep output greppable for scripting (e.g. `--json` flag is a future extension, not required now).
 - Each prompt should show the default option clearly and allow Enter to accept it.
+- *(CLI)* Data to stdout, diagnostics to stderr — this is what makes a tool pipeable.
+
+### Functional core, imperative shell
+
+Split the project into pure decision-making and impure effects (per `.agents/AGENTS-NODE.md`):
+
+- **Core (pure)** — same input, same output; no `fs`, no network, no clock, no `process.exit`, no logging:
+  - `src/naming.ts` — `buildOutputName`, `resolveCollision`.
+  - `src/resize.ts` — resize decision: whether a resize is needed, and the target dimensions (or "already fits").
+  - `src/quality.ts` — `findQualityUnderCap`: the quality-reduction loop over an in-memory buffer.
+- **Shell (impure)** — reads input, calls core functions to decide, then performs effects:
+  - `src/process.ts` — `processImage`: reads/writes files, calls sharp, temp-file writes.
+  - `src/index.ts` — prompt flow + orchestration (terminal I/O).
+
+Rules this implies:
+
+- **Core and shell do not share a module.** A pure function and an I/O function never live in the same file; the pure half gets its own module so it can sit in the coverage allowlist.
+- **Push I/O out to the caller.** `resolveCollision(name, existingNames)` takes the existing names as an argument instead of calling `readdir`; the shell gathers the directory listing and passes it in. Same pattern for resize: the shell reads dimensions via sharp, the pure function decides.
+- `processImage` never calls `process.exit`; it returns results/errors and lets the shell decide the exit code.
 
 ### Proposed prompt sequence
 
@@ -154,23 +173,39 @@ Process 24 images? [y/N]
 
 | Area | Detail |
 |------|--------|
-| Runtime | Node.js (≥18, current LTS preferred) |
-| Image library | `sharp` (libvips) — fastest available for batch work, high-quality output, first-class WebP/AVIF encode support |
+| Runtime | Node 24 LTS (`.nvmrc` = `24`, `engines.node` = `">=24"`). Native type stripping runs `src/*.ts` directly — no `tsx`, no loader, no dev/prod mismatch |
+| Package manager | pnpm. Set the `packageManager` field; `pnpm-lock.yaml` is committed and authoritative; CI uses `pnpm install --frozen-lockfile` |
+| Image library | `sharp` (libvips) — pre-approved by house standard, fastest available for batch work, first-class WebP/AVIF encode support |
 | CLI prompts | `@clack/prompts` (recommended) or `inquirer` — one dependency, keep it small |
-| Project layout | Flat: `src/index.ts` + `src/process.ts` + `src/naming.ts`, `package.json`, `README.md`, `tests/` |
-| Scripts | `start` → run the CLI (`tsx src/index.ts`); `build` → `tsc`; `test` → run tests; `lint` → run linter |
-| Language | TypeScript — compiled with `tsc` or run directly via `tsx`; types for prompt answers and processing config |
-| Testing | Unit tests for pure logic (filename building, quality-loop, cap math) with Vitest; CLI flow tested via mocked prompt answers |
-| Naming logic | Pure function: `buildOutputName(original, {prefix, suffix, ext})` → `[prefix]<base>[suffix].ext` with collision resolution |
-| Quality loop | Pure function: `findQualityUnderCap(buffer, format, cap, {start=80, step=10, floor=20})` → quality level + final buffer |
+| Language | TypeScript, ESM only (`"type": "module"`). Imports use the on-disk `.ts` extension (`./mod.ts`); `tsc` rewrites to `.js` on emit. `node:` prefix for builtins; relative imports only; no `paths` aliases; no barrel file |
+| TypeScript config | Two configs: `tsconfig.json` typechecks `src/` + tests + `*.config.ts` (es2023, `nodenext`, `rewriteRelativeImportExtensions`, `verbatimModuleSyntax`, strict + `noUncheckedIndexedAccess`, `noEmit`); `tsconfig.build.json` emits `src/` to `dist/` (declarations + sourcemaps, `*.test.ts` excluded) |
+| Project layout | `src/index.ts` (prompt flow + orchestration), `src/process.ts` (shell), `src/naming.ts` + `src/resize.ts` + `src/quality.ts` (pure core), colocated `src/*.test.ts`, `src/pipeline.test.ts` (e2e smoke), `tests/fixtures/` (sample inputs), `dist/` (gitignored) |
+| Scripts | `dev` → `node src/index.ts`; `check` → `tsc -p tsconfig.json`; `build` → `tsc -p tsconfig.build.json`; `test` → `vitest run --coverage`; `lint` → `eslint . --max-warnings 0`; `format` → `prettier --write .`; `format:check` → `prettier --check .`; `verify` → `pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build` |
+| Lint/format | ESLint flat config, type-aware (`typescript-eslint` `recommendedTypeChecked`, `no-floating-promises`, `consistent-type-imports`, `--max-warnings 0`); Prettier (semi, double quotes, trailing commas, print width 88) with `.prettierignore` (`dist/`, `coverage/`, `node_modules/`, `pnpm-lock.yaml`) |
+| Testing | Vitest, no globals, table-driven tests for core functions, fixtures over mocks at the I/O boundary. Coverage (v8) folded into `test`: allowlist `src/naming.ts`, `src/resize.ts`, `src/quality.ts`; thresholds lines/functions 90, branches 85. **Every new pure core module must be added to `coverage.include`** |
+| Naming logic | Pure: `buildOutputName(original, {prefix, suffix, ext})` → `[prefix]<base>[suffix].ext`; collision resolution via `resolveCollision(name, existingNames)` |
+| Resize decision | Pure: `shouldResize(width, height, maxDimension, axis)` → target dimensions or "already fits" (no upscaling) |
+| Quality loop | Pure: `findQualityUnderCap(buffer, format, capBytes, {start=80, step=10, floor=20})` → quality level + final buffer |
+| Concurrency | Process files sequentially or with a small bounded pool (e.g. 4). Never `Promise.all` over the whole folder — bounded concurrency is a house rule |
+| Errors/async | `catch` binds `unknown` and narrows before use; preserve `cause` when rethrowing; `AbortSignal` for anything cancellable (Ctrl-C); no floating promises (lint-enforced) |
+| Exit codes | Exit non-zero on failure, set in the shell only; a pure function never calls `process.exit` |
 
 **Key files to create:**
 
-- `package.json` — deps (`sharp`, `@clack/prompts`), scripts
-- `src/index.ts` — prompt flow + orchestration
-- `src/process.ts` — per-image processing (resize, convert, cap loop)
-- `src/naming.ts` — output filename + collision logic
-- `src/process.test.ts` / `src/naming.test.ts` — unit tests
+- `package.json` — `"type": "module"`, `engines.node` `">=24"`, `packageManager` (pnpm), deps (`sharp`, `@clack/prompts`), scripts per the table above
+- `.nvmrc` — `24`
+- `tsconfig.json` / `tsconfig.build.json` — typecheck / emit pair
+- `vitest.config.ts` — include `src/**/*.test.ts`; coverage allowlist + thresholds
+- `eslint.config.js` — flat config, type-aware (`allowDefaultProject` lists only `eslint.config.js`)
+- `.prettierrc` / `.prettierignore`
+- `src/index.ts` — prompt flow + orchestration (shell)
+- `src/process.ts` — per-image processing: resize, convert, cap loop, temp-file writes (shell)
+- `src/naming.ts` — output filename + collision logic (pure)
+- `src/resize.ts` — resize decision + dimension math (pure)
+- `src/quality.ts` — quality-cap loop (pure)
+- `src/naming.test.ts` / `src/resize.test.ts` / `src/quality.test.ts` — unit tests (colocated, TDD)
+- `src/pipeline.test.ts` — end-to-end smoke test over `tests/fixtures/`
+- `tests/fixtures/` — sample source images (JPEG, PNG, WebP, TIFF, one GIF)
 - `README.md` — usage + example run
 
 ---
@@ -185,7 +220,21 @@ Process 24 images? [y/N]
 | Safety | Original files are byte-identical after a run (hash check on a sample) |
 | Speed | A 50-image JPEG batch (≈4 MB each) completes in under ~10 seconds on a mid-range laptop |
 | UX | Prompt flow completable end-to-end with defaults alone in ≤ 60 seconds |
-| Quality | `npm run lint && npm test` pass from the project root |
+| Quality | `pnpm verify` exits 0 from the project root; `node dist/index.js` runs the CLI from the built output |
+
+---
+
+## Definition of done (per task)
+
+- [ ] `pnpm check` — clean, zero diagnostics
+- [ ] `pnpm lint` — zero errors **and** zero warnings
+- [ ] `pnpm format:check` — no diff
+- [ ] `pnpm test` — all green, thresholds met (lines/functions 90, branches 85)
+- [ ] every new pure core module added to `coverage.include` in `vitest.config.ts`
+- [ ] `pnpm build` — emits, and `dist/` contains no `*.test.js`
+- [ ] `node dist/index.js` runs
+
+Do not report a task done on a subset of these; if one fails for a reason outside the task's scope, say which and why.
 
 ---
 
@@ -198,16 +247,26 @@ Process 24 images? [y/N]
 3. **PNG + size cap:** warn and skip the cap for PNG (A) — lossless output is kept at full quality regardless of cap.
 4. **Subfolders:** top-level files only (A) — the `processed/` folder contains only files from the selected folder, no recursion.
 
+*Resolved during standards alignment (2026-08-19, per `.agents/AGENTS-NODE.md`):*
+
+5. **Runtime:** Node 24 LTS with native type stripping — no `tsx`, dev runs via `node src/index.ts` (A).
+6. **Package manager:** pnpm with committed lockfile and `packageManager` field (A).
+7. **Structure:** quality loop and resize decision are pure modules (`src/quality.ts`, `src/resize.ts`); `src/process.ts` is shell-only — core and shell do not share a module (A).
+8. **Coverage gate:** allowlist of pure core modules, thresholds 90/90/85, folded into `pnpm test` (A).
+9. **e2e smoke test:** lives in `src/pipeline.test.ts` so the Vitest `include` (`src/**/*.test.ts`) covers it; `tests/` holds fixtures only (A).
+
 *No remaining open questions.*
 
 ---
 
 ## Implementation Task Outline
 
-1. Scaffold project (`package.json`, deps, folder layout, README).
-2. Implement `src/naming.ts` (+ tests) — filename builder + collision resolution.
-3. Implement `src/process.ts` (+ tests) — resize, convert, quality-cap loop.
-4. Implement `src/index.ts` prompt flow — ordered questions, validation, summary confirm, error handling.
-5. Wire orchestration: walk folder → process each → write to `processed/` → report summary.
-6. Add a sample fixture set + end-to-end smoke test.
-7. Run `npm run lint && npm test` and verify on a real image folder.
+1. Scaffold project (`package.json`, pnpm setup, `.nvmrc`, tsconfig pair, vitest/eslint/prettier configs, README).
+2. Implement `src/naming.ts` (+ tests) — filename builder + collision resolution (pure).
+3. Implement `src/resize.ts` (+ tests) — resize decision + dimension math (pure).
+4. Implement `src/quality.ts` (+ tests) — quality-cap loop incl. PNG cap-skip rule (pure).
+5. Implement `src/process.ts` — shell: resize, convert, cap loop, temp-file writes.
+6. Implement `src/index.ts` prompt flow — ordered questions, validation, summary confirm, cancel/error handling.
+7. Wire orchestration: walk folder → process each → write to `processed/` → report summary.
+8. Add a sample fixture set + `src/pipeline.test.ts` end-to-end smoke test.
+9. Run `pnpm verify` and manually smoke-run on a real image folder; confirm `node dist/index.js` runs the built CLI.
