@@ -1,0 +1,21 @@
+{
+  "name": "squooshy",
+  "version": "0.1.0",
+  "description": "Interactive CLI that batch-processes a folder of images for a design -> product workflow",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "node src/index.ts",
+    "start": "node src/index.ts",
+    "check": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --coverage",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build"
+  }
+}
