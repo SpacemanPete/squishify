@@ -184,6 +184,18 @@ function positiveNumber(value: string | undefined): string | undefined {
   return n > 0 && Number.isFinite(n) ? undefined : "Enter a positive number.";
 }
 
+export async function promptOutputName(): Promise<string | typeof CANCEL> {
+  const value = await text({
+    message: "Output folder name?",
+    placeholder: "processed",
+    validate: (input) =>
+      /[/\\]|\.\./.test(input ?? "") ? "Must not contain path separators (/, \\, ..)." : undefined,
+  });
+  if (isCancel(value)) return cancelRun();
+  const name = String(value).trim();
+  return name === "" ? "processed" : name;
+}
+
 function cancelRun(): typeof CANCEL {
   cancel("Cancelled.");
   return CANCEL;
@@ -251,9 +263,9 @@ export async function listImages(dir: string): Promise<string[]> {
   return files.sort();
 }
 
-export async function pickOutputDir(dir: string): Promise<string> {
+export async function pickOutputDir(dir: string, baseName = "processed"): Promise<string> {
   for (let n = 1; ; n++) {
-    const candidate = path.join(dir, n === 1 ? "processed" : `processed_${n}`);
+    const candidate = path.join(dir, n === 1 ? baseName : `${baseName}_${n}`);
     let info;
     try {
       info = await stat(candidate);
@@ -454,7 +466,12 @@ export async function main(): Promise<void> {
     outro();
     return;
   }
-  const outDir = await pickOutputDir(dir);
+  const baseName = await promptOutputName();
+  if (baseName === CANCEL) {
+    outro();
+    return;
+  }
+  const outDir = await pickOutputDir(dir, baseName);
   const confirmed = await confirmSummary(dir, config, outDir);
   if (confirmed !== true) {
     outro();

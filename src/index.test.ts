@@ -51,6 +51,7 @@ import {
   pickOutputDir,
   promptConfig,
   promptInputDirectory,
+  promptOutputName,
   runBatch,
   main,
   renderReport,
@@ -133,6 +134,45 @@ describe("promptInputDirectory", () => {
   it("handles cancel cleanly", async () => {
     mocks.path.mockResolvedValueOnce(Symbol.for("clack:cancel"));
     await expect(promptInputDirectory()).resolves.toBe(CANCEL);
+    expect(mocks.cancel).toHaveBeenCalled();
+  });
+});
+
+describe("promptOutputName", () => {
+  it("defaults to processed when left blank", async () => {
+    mocks.text.mockResolvedValueOnce("");
+    await expect(promptOutputName()).resolves.toBe("processed");
+    expect(mocks.text).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Output folder name?" }),
+    );
+  });
+
+  it("returns the trimmed custom name", async () => {
+    mocks.text.mockResolvedValueOnce("  web  ");
+    await expect(promptOutputName()).resolves.toBe("web");
+  });
+
+  it("rejects path separators via prompt validation", async () => {
+    const seen: {
+      validate?: (value: string | undefined) => string | undefined;
+    }[] = [];
+    mocks.text.mockImplementation((opts) => {
+      seen.push(opts as { validate?: (value: string | undefined) => string | undefined });
+      return Promise.resolve("web");
+    });
+
+    await expect(promptOutputName()).resolves.toBe("web");
+
+    const validate = seen[0]?.validate;
+    expect(validate?.("../evil")).toBeTruthy();
+    expect(validate?.("a/b")).toBeTruthy();
+    expect(validate?.("a\\b")).toBeTruthy();
+    expect(validate?.("web")).toBeUndefined();
+  });
+
+  it("handles cancel cleanly", async () => {
+    mocks.text.mockResolvedValueOnce(Symbol.for("clack:cancel"));
+    await expect(promptOutputName()).resolves.toBe(CANCEL);
     expect(mocks.cancel).toHaveBeenCalled();
   });
 });
@@ -438,6 +478,24 @@ describe("pickOutputDir", () => {
     await writeFile(path.join(dir, "processed_2", "b"), "x");
     await expect(pickOutputDir(dir)).resolves.toBe(path.join(dir, "processed_3"));
   });
+
+  it("uses a custom base name for the first run", async () => {
+    const dir = await makeDir();
+    await expect(pickOutputDir(dir, "web")).resolves.toBe(path.join(dir, "web"));
+  });
+
+  it("numbers a custom base name when occupied", async () => {
+    const dir = await makeDir();
+    await mkdir(path.join(dir, "web"));
+    await writeFile(path.join(dir, "web", "old.jpeg"), "x");
+    await expect(pickOutputDir(dir, "web")).resolves.toBe(path.join(dir, "web_2"));
+  });
+
+  it("avoids a file with the custom base name", async () => {
+    const dir = await makeDir();
+    await writeFile(path.join(dir, "web"), "x");
+    await expect(pickOutputDir(dir, "web")).resolves.toBe(path.join(dir, "web_2"));
+  });
 });
 
 describe("runBatch", () => {
@@ -717,6 +775,7 @@ describe("main", () => {
     mocks.confirm.mockResolvedValueOnce(false);
     mocks.text.mockResolvedValueOnce("");
     mocks.text.mockResolvedValueOnce("");
+    mocks.text.mockResolvedValueOnce("");
     mocks.confirm.mockResolvedValueOnce(true);
 
     await main();
@@ -730,6 +789,26 @@ describe("main", () => {
     expect(mocks.spinner).toHaveBeenCalledTimes(1);
   });
 
+  it("uses a custom output folder name and reports it", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mocks.path.mockResolvedValueOnce(dir);
+    mocks.confirm.mockResolvedValueOnce(false);
+    mocks.select.mockResolvedValueOnce("jpeg");
+    mocks.confirm.mockResolvedValueOnce(false);
+    mocks.text.mockResolvedValueOnce("");
+    mocks.text.mockResolvedValueOnce("");
+    mocks.text.mockResolvedValueOnce("web");
+    mocks.confirm.mockResolvedValueOnce(true);
+
+    await main();
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining(path.join(dir, "web")));
+    const outputs = await readdir(path.join(dir, "web"));
+    expect(outputs).toEqual(["photo.jpeg"]);
+  });
+
   it("picks processed_2 when processed/ exists, and reports the chosen dir", async () => {
     const dir = await makeDir({ "photo.jpg": "photo.jpg" });
     await mkdir(path.join(dir, "processed"));
@@ -739,6 +818,7 @@ describe("main", () => {
     mocks.confirm.mockResolvedValueOnce(false);
     mocks.select.mockResolvedValueOnce("jpeg");
     mocks.confirm.mockResolvedValueOnce(false);
+    mocks.text.mockResolvedValueOnce("");
     mocks.text.mockResolvedValueOnce("");
     mocks.text.mockResolvedValueOnce("");
     mocks.confirm.mockResolvedValueOnce(true);
@@ -758,6 +838,7 @@ describe("main", () => {
     mocks.confirm.mockResolvedValueOnce(false);
     mocks.select.mockResolvedValueOnce("jpeg");
     mocks.confirm.mockResolvedValueOnce(false);
+    mocks.text.mockResolvedValueOnce("");
     mocks.text.mockResolvedValueOnce("");
     mocks.text.mockResolvedValueOnce("");
     mocks.confirm.mockResolvedValueOnce(false);

@@ -10,7 +10,7 @@ An interactive CLI that batch-processes a folder of images for a design → prod
 - **Format conversion** — WebP, JPEG, PNG, or AVIF output.
 - **Per-file size cap** — encodes at quality 80, then steps down by 10 to a floor of 20 until the file fits the cap; warns if the cap can't be met. Skipped for PNG (lossless output ignores quality).
 - **Consistent naming** — `[prefix]<original-name>[suffix].<ext>`, with `-1`, `-2`, … appended on collision instead of overwriting.
-- **Safe writes** — output goes to a fresh `<source-dir>/processed/` (or `processed_2/`, `processed_3/`, … if a previous run's output is still there) via temp file + rename, so a mid-run failure leaves no partial files and a rerun never mingles with earlier output.
+- **Safe writes** — you pick the output folder's name (blank = `processed`); output goes to a fresh `<source-dir>/<name>/` (or `<name>_2/`, `<name>_3/`, … if a previous run's output is still there) via temp file + rename, so a mid-run failure leaves no partial files and a rerun never mingles with earlier output.
 - **Clear reporting** — per-file source → output, format, dimensions, size; plus totals for processed / skipped / errored and a list of failures with reasons.
 
 ## Requirements
@@ -45,9 +45,10 @@ pnpm start
   ? In what unit? Kilobytes (KB)
 ? Prefix (optional) prod-
 ? Suffix (optional) -web
+? Output folder name? exports
 
 Folder:  ~/design/exports
-Output:  ~/design/exports/processed
+Output:  ~/design/exports/exports
 Format:  webp
 Resize:  fit width to 2000px
 Size cap: 500 KB
@@ -59,7 +60,7 @@ Suffix:  -web
 ╰─ spinner updates once per file while processing                 ╯
 
 Processed 24, skipped 1, errors 1
-Output: ~/design/exports/processed
+Output: ~/design/exports/exports
   hero.png -> prod-hero-web.webp (webp, 2000x1500, 245 KB)
   ...
 Total output: 2.4 MB
@@ -67,7 +68,7 @@ Total output: 2.4 MB
 
 The folder prompt is clack's path finder: it starts in the current directory and suggests matching paths as you type — navigate with the arrow keys, hit Tab to accept a suggestion. A leading `~` is resolved to your home directory when you submit (the finder itself doesn't expand it while typing).
 
-`image.png` becomes `~/design/exports/processed/prod-image-web.webp`. Each run writes to a fresh output folder — if `processed/` already holds files from an earlier run, squooshy picks the next free name (`processed_2/`, `processed_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
+`image.png` becomes `~/design/exports/exports/prod-image-web.webp`. Each run writes to a fresh output folder — if `<name>/` already holds files from an earlier run, squooshy picks the next free name (`<name>_2/`, `<name>_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
 
 ## Supported formats
 
