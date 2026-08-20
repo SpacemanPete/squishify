@@ -186,7 +186,8 @@ export function formatCap(capBytes: number): string {
   if (capBytes % (1024 * 1024) === 0) {
     return `${capBytes / (1024 * 1024)} MB`;
   }
-  return `${capBytes / 1024} KB`;
+  const kb = capBytes / 1024;
+  return `${Math.round(kb * 10) / 10} KB`;
 }
 
 export async function confirmSummary(

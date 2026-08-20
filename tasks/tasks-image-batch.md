@@ -21,7 +21,7 @@
 - `src/process.test.ts` — Tests for `process.ts` using real fixtures (fixtures over mocks; written first, per TDD).
 - `src/index.ts` — Interactive prompt flow + orchestration of the full run, including driving the progress spinner (shell).
 - `src/index.test.ts` — Tests for prompt flow (mocked prompts) and orchestration (written first, per TDD).
-- `src/pipeline.test.ts` — End-to-end smoke test over `tests/fixtures/`.
+- `src/pipeline.test.ts` — End-to-end smoke test over `tests/fixtures/` (copies fixtures to a temp dir; asserts outputs, byte-identical sources, 500 KB cap honored or reported unmeetable).
 - `tests/fixtures/` — Sample source images (JPEG, PNG, WebP, TIFF, plus one GIF) for end-to-end tests.
 - `README.md` — Usage instructions and an example run.
 
@@ -98,8 +98,8 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 8.6 Implement the spinner wiring and run the tests until they pass.
   - [x] 8.7 Write failing tests for reporting: per-file summary (source → output, format, dimensions, size), grand total (processed/skipped/errors/total size), and the failed-files list with reasons. Run tests to confirm they fail.
   - [x] 8.8 Implement the reporting output and run the tests until they pass.
-- [ ] 9.0 Add fixtures + end-to-end smoke test; run the full gate
-  - [ ] 9.1 Create small fixture images in `tests/fixtures/` (JPEG, PNG, WebP, TIFF, plus one GIF to exercise the skip path).
-  - [ ] 9.2 Write `src/pipeline.test.ts`, an end-to-end test that runs the full pipeline on the fixtures and asserts the expected number of outputs, correct filenames, and that `processed/` contains only expected files.
-  - [ ] 9.3 Add an end-to-end assertion that source fixtures are byte-identical after a run (hash compare) and that a 500 KB cap is honored or explicitly reported as unmeetable.
-  - [ ] 9.4 Run `pnpm verify` (check, lint, format:check, test with coverage thresholds, build), confirm `dist/` contains no `*.test.js`, and do a manual smoke run on a real image folder plus `node dist/index.js` from the built output — including confirming the live progress spinner updates during processing and that stdout contains only the final report.
+- [x] 9.0 Add fixtures + end-to-end smoke test; run the full gate
+  - [x] 9.1 Create small fixture images in `tests/fixtures/` (JPEG, PNG, WebP, TIFF, plus one GIF to exercise the skip path).
+  - [x] 9.2 Write `src/pipeline.test.ts`, an end-to-end test that runs the full pipeline on the fixtures and asserts the expected number of outputs, correct filenames, and that `processed/` contains only expected files.
+  - [x] 9.3 Add an end-to-end assertion that source fixtures are byte-identical after a run (hash compare) and that a 500 KB cap is honored or explicitly reported as unmeetable.
+  - [x] 9.4 Run `pnpm verify` (check, lint, format:check, test with coverage thresholds, build), confirm `dist/` contains no `*.test.js`, and do a manual smoke run on a real image folder plus `node dist/index.js` from the built output — including confirming the live progress spinner updates during processing and that stdout contains only the final report.

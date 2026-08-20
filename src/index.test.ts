@@ -38,6 +38,7 @@ vi.mock("@clack/prompts", () => ({
 import {
   CANCEL,
   confirmSummary,
+  formatCap,
   listImages,
   promptConfig,
   promptInputDirectory,
@@ -470,6 +471,10 @@ describe("runWithSpinner", () => {
   });
 });
 
+it("rounds fractional KB sizes to one decimal", () => {
+  expect(formatCap(132632)).toBe("129.5 KB");
+  expect(formatCap(245 * 1024)).toBe("245 KB");
+});
 describe("renderReport", () => {
   it("renders per-file summaries, grand totals, and the failed-files list", () => {
     const result: BatchResult = {
