@@ -77,18 +77,18 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 5.3 Write failing tests for the PNG + cap rule: with a cap set and PNG output, the function warns and skips the quality loop, returning full-quality output. Run tests to confirm they fail.
   - [x] 5.4 Implement the PNG cap-skip behavior and run the tests until they pass.
   - [x] 5.5 Review fixes: `QualityResult` gains an optional `warning` field (replaces `console.warn` in the core module — the shell surfaces warnings), the cap loop always runs at least once (`start` below `floor` clamps to `floor`, `step` clamped to ≥ 1), and the reported quality always matches the attempted encode when the step misses the floor. Tests updated + extended; `pnpm verify` passes.
-- [ ] 6.0 Implement `src/process.ts` — shell: resize, convert, and skip logic (Track B)
+- [x] 6.0 Implement `src/process.ts` — shell: resize, convert, and skip logic (Track B)
   - [x] 6.1 Write failing tests in `src/process.test.ts` using real fixture images (fixtures over mocks — do not mock sharp): resize applies `shouldResize` results correctly, conversion to each output format (JPEG/WebP/AVIF/PNG) yields the right output mime/format and extension, and the cap loop writes the `findQualityUnderCap` result. Run tests to confirm they fail.
   - [x] 6.2 Implement `processImage` with `sharp` (resize via the pure decision, convert, quality cap) and run the tests until they pass.
   - [x] 6.3 Write failing tests for skip logic: GIF files are skipped with reason `unsupported format: gif`, and unsupported/corrupt files are skipped with a logged reason without throwing. Run tests to confirm they fail.
   - [x] 6.4 Implement the skip logic and run the tests until they pass.
-- [ ] 7.0 Implement `src/index.ts` — interactive prompt flow (TDD, mocked prompts)
-  - [ ] 7.1 Write failing tests in `src/index.test.ts` for input-directory validation: accepts a valid folder, rejects a missing path / non-directory / image-less folder, and loops back with a friendly re-enter message. Run tests to confirm they fail.
-  - [ ] 7.2 Implement the input-directory validation using `@clack/prompts` and run the tests until they pass.
-  - [ ] 7.3 Write failing tests for the prompt sequence: resize (yes/no → fit width/height → pixel value), output-format menu, size-cap (yes/no → value + KB/MB), and optional prefix/suffix, all producing a correctly typed config object. Run tests to confirm they fail.
-  - [ ] 7.4 Implement the prompt sequence and run the tests until they pass.
-  - [ ] 7.5 Write failing tests for the final confirmation summary (all answers displayed, `y/N` to confirm) and Ctrl-C/cancel handling that exits cleanly with no partial writes. Run tests to confirm they fail.
-  - [ ] 7.6 Implement the confirmation summary and cancel handling and run the tests until they pass.
+- [x] 7.0 Implement `src/index.ts` — interactive prompt flow (TDD, mocked prompts)
+  - [x] 7.1 Write failing tests in `src/index.test.ts` for input-directory validation: accepts a valid folder, rejects a missing path / non-directory / image-less folder, and loops back with a friendly re-enter message. Run tests to confirm they fail.
+  - [x] 7.2 Implement the input-directory validation using `@clack/prompts` and run the tests until they pass.
+  - [x] 7.3 Write failing tests for the prompt sequence: resize (yes/no → fit width/height → pixel value), output-format menu, size-cap (yes/no → value + KB/MB), and optional prefix/suffix, all producing a correctly typed config object. Run tests to confirm they fail.
+  - [x] 7.4 Implement the prompt sequence and run the tests until they pass.
+  - [x] 7.5 Write failing tests for the final confirmation summary (all answers displayed, `y/N` to confirm) and Ctrl-C/cancel handling that exits cleanly with no partial writes. Run tests to confirm they fail.
+  - [x] 7.6 Implement the confirmation summary and cancel handling and run the tests until they pass.
 - [ ] 8.0 Wire orchestration: walk folder → process each → drive progress spinner → write to `processed/` → report (TDD)
   - [ ] 8.1 Write failing tests for folder walking: lists top-level files only, filters to supported formats, and sorts deterministically. Run tests to confirm they fail.
   - [ ] 8.2 Implement the folder walk and run the tests until they pass.
