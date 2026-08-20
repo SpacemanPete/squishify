@@ -53,13 +53,13 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
 
 - [x] 0.0 Create feature branch
   - [x] 0.1 Create and checkout a new branch for this feature (`git checkout -b feature/image-batch`)
-- [ ] 1.0 Scaffold project (package.json, deps, folder layout, config, README)
+- [x] 1.0 Scaffold project (package.json, deps, folder layout, config, README)
   - [x] 1.1 Initialize the project with pnpm: `package.json` with `"type": "module"`, `"engines": { "node": ">=24" }`, `packageManager` (pnpm), and scripts: `dev` (`node src/index.ts`), `start` (`node src/index.ts`), `check` (`tsc -p tsconfig.json`), `build` (`tsc -p tsconfig.build.json`), `test` (`vitest run --coverage`), `lint` (`eslint . --max-warnings 0`), `format` (`prettier --write .`), `format:check` (`prettier --check .`), `verify` (`pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build`). Create `.nvmrc` with `24`.
   - [x] 1.2 Install runtime dependencies `sharp` and `@clack/prompts`, plus dev dependencies `typescript@^5.9`, `@types/node`, `vitest`, `@vitest/coverage-v8`, `eslint`, `typescript-eslint`, `@eslint/js`, and `prettier`. No `tsx` — Node 24 strips types natively. Commit `pnpm-lock.yaml`.
   - [x] 1.3 Create `tsconfig.json` (es2023, `nodenext`, `rewriteRelativeImportExtensions`, `verbatimModuleSyntax`, strict + `noUncheckedIndexedAccess`, `noEmit`; include `src` + `*.config.ts`) and `tsconfig.build.json` (extends it, emits to `dist/` with declarations + sourcemaps, excludes `src/**/*.test.ts`). Create the folder layout: `src/` for source modules and `tests/` for end-to-end fixtures.
   - [x] 1.4 Create `vitest.config.ts` (include `src/**/*.test.ts`; coverage allowlist `src/naming.ts`, `src/resize.ts`, `src/quality.ts`, `src/progress.ts`; thresholds lines/functions 90, branches 85) and `eslint.config.js` (flat, type-aware, `allowDefaultProject` lists only `eslint.config.js`) so `pnpm test` and `pnpm lint` run from the project root. Add `.prettierrc` and `.prettierignore` (`dist/`, `coverage/`, `node_modules/`, `pnpm-lock.yaml`).
   - [x] 1.5 Write `README.md` with setup, usage, and a short example run.
-  - [ ] 1.6 Create a trivial placeholder module + placeholder test and verify `pnpm verify` passes, confirming the harness works.
+  - [x] 1.6 Create a trivial placeholder module + placeholder test and verify `pnpm verify` passes, confirming the harness works.
 - [ ] 2.0 Implement `src/naming.ts` — filename builder + collision resolution (Track A)
   - [ ] 2.1 Write failing tests in `src/naming.test.ts` for `buildOutputName`: prefix-only, suffix-only, both, neither, and extension swap (e.g., `image.png` + `prod-` + `-web` + `.webp` → `prod-image-web.webp`). Run tests to confirm they fail.
   - [ ] 2.2 Implement `buildOutputName(originalName, { prefix, suffix, ext })` and run the tests until they pass.
