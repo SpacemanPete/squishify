@@ -65,9 +65,9 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 2.2 Implement `buildOutputName(originalName, { prefix, suffix, ext })` and run the tests until they pass.
   - [x] 2.3 Write failing tests in `src/naming.test.ts` for `resolveCollision`: no collision returns name unchanged, one collision appends `-1`, multiple collisions append `-2`, `-3`, … Run tests to confirm they fail.
   - [x] 2.4 Implement `resolveCollision(name, existingNames)` — takes the existing names as an argument rather than reading the directory — and run the tests until they pass.
-- [ ] 3.0 Implement `src/progress.ts` — progress message formatter (Track C)
-  - [ ] 3.1 Write failing tests in `src/progress.test.ts` for `formatProgress(index, total, currentName, { processed, skipped, errors })`: first file renders `Processing 1/24 — hero.png (processed 1, skipped 0, errors 0)`, mid-run position and running counts render correctly, and singular/plural wording is handled (e.g. `1 error` vs `2 errors`). Run tests to confirm they fail.
-  - [ ] 3.2 Implement `formatProgress` and run the tests until they pass.
+- [x] 3.0 Implement `src/progress.ts` — progress message formatter (Track C)
+  - [x] 3.1 Write failing tests in `src/progress.test.ts` for `formatProgress(index, total, currentName, { processed, skipped, errors })`: first file renders `Processing 1/24 — hero.png (processed 1, skipped 0, errors 0)`, mid-run position and running counts render correctly, and singular/plural wording is handled (e.g. `1 error` vs `2 errors`). Run tests to confirm they fail.
+  - [x] 3.2 Implement `formatProgress` and run the tests until they pass.
 - [ ] 4.0 Implement `src/resize.ts` — resize decision + dimension math (Track B)
   - [ ] 4.1 Write failing tests in `src/resize.test.ts` for `shouldResize`: fit-by-width and fit-by-height both preserve aspect ratio, an already-smaller image reports "already fits" (no upscaling), and dimension math is correct for both axes. Run tests to confirm they fail.
   - [ ] 4.2 Implement `shouldResize(width, height, maxDimension, axis)` and run the tests until they pass.
