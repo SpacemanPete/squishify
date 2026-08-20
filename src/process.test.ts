@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -112,4 +112,49 @@ describe("processImage", () => {
     expect(result.size).toBeLessThanOrEqual(cap);
     expect((await readFile(out)).byteLength).toBeLessThanOrEqual(cap);
   });
+});
+
+describe("skip logic", () => {
+  it("skips GIF files with reason `unsupported format: gif` and writes no output", async () => {
+    const dir = await tempOutDir();
+    const out = path.join(dir, "out.webp");
+    const result = await processImage(path.join(FIXTURES, "photo.gif"), out, {
+      format: "webp",
+    });
+    expect(result).toEqual({ status: "skipped", reason: "unsupported format: gif" });
+    await expect(readFile(out)).rejects.toThrow();
+  });
+
+  it("skips corrupt files with a logged reason without throwing", async () => {
+    const dir = await tempOutDir();
+    const out = path.join(dir, "out.webp");
+    const result = await processImage(path.join(FIXTURES, "corrupt.jpg"), out, {
+      format: "webp",
+    });
+    if (result.status !== "skipped") throw new Error("expected skipped");
+    expect(result.reason).toMatch(/^unreadable:/);
+    await expect(readFile(out)).rejects.toThrow();
+  });
+
+  it("skips unsupported content without throwing", async () => {
+    const dir = await tempOutDir();
+    const bogus = path.join(dir, "bogus.png");
+    await writeFile(bogus, "this is not an image");
+    const result = await processImage(bogus, path.join(dir, "out.webp"), { format: "webp" });
+    if (result.status !== "skipped") throw new Error("expected skipped");
+    expect(result.reason).toMatch(/^unreadable:/);
+    await expect(readFile(path.join(dir, "out.webp"))).rejects.toThrow();
+  });
+});
+
+it("surfaces the findQualityUnderCap warning on the result (PNG + cap)", async () => {
+  const dir = await tempOutDir();
+  const out = path.join(dir, "out.png");
+  const result = await processImage(path.join(FIXTURES, "photo.jpg"), out, {
+    format: "png",
+    capBytes: 1,
+  });
+  if (result.status !== "ok") throw new Error("expected ok");
+  expect(result.capMet).toBe(false);
+  expect(result.warning).toMatch(/lossless/i);
 });

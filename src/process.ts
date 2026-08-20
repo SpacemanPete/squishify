@@ -22,6 +22,7 @@ export type ProcessResult =
       height: number;
       size: number;
       capMet?: boolean;
+      warning?: string;
     }
   | { status: "skipped"; reason: string };
 
@@ -51,10 +52,12 @@ export async function processImage(
 
   let encoded: Buffer;
   let capMet: boolean | undefined;
+  let warning: string | undefined;
   if (capBytes !== undefined) {
     const result = await findQualityUnderCap(buffer, format, capBytes);
     encoded = result.buffer;
     capMet = result.met;
+    if (result.warning !== undefined) warning = result.warning;
   } else {
     encoded = await pipeline.toFormat(format, { quality: 80 }).toBuffer();
   }
@@ -70,6 +73,7 @@ export async function processImage(
     height: outputMetadata.height ?? 0,
     size: encoded.byteLength,
     ...(capMet !== undefined ? { capMet } : {}),
+    ...(warning !== undefined ? { warning } : {}),
   };
 }
 
