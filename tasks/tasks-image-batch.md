@@ -89,15 +89,15 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 7.4 Implement the prompt sequence and run the tests until they pass.
   - [x] 7.5 Write failing tests for the final confirmation summary (all answers displayed, `y/N` to confirm) and Ctrl-C/cancel handling that exits cleanly with no partial writes. Run tests to confirm they fail.
   - [x] 7.6 Implement the confirmation summary and cancel handling and run the tests until they pass.
-- [ ] 8.0 Wire orchestration: walk folder → process each → drive progress spinner → write to `processed/` → report (TDD)
-  - [ ] 8.1 Write failing tests for folder walking: lists top-level files only, filters to supported formats, and sorts deterministically. Run tests to confirm they fail.
-  - [ ] 8.2 Implement the folder walk and run the tests until they pass.
-  - [ ] 8.3 Write failing tests for the output pipeline: creates `<source-dir>/processed/` if missing, resolves collisions via the naming module, writes to a temp file then renames into place, processes with bounded concurrency (sequential or a small pool — never `Promise.all` over the whole folder), and never modifies source files. Run tests to confirm they fail.
-  - [ ] 8.4 Implement the output pipeline and run the tests until they pass.
-  - [ ] 8.5 Write failing tests for the progress spinner wiring with a mocked spinner: the spinner message updates once per file using `formatProgress` with correct position and running counts, the spinner stops before the final report prints, and a cancelled run stops the spinner with no partial writes. Run tests to confirm they fail.
-  - [ ] 8.6 Implement the spinner wiring and run the tests until they pass.
-  - [ ] 8.7 Write failing tests for reporting: per-file summary (source → output, format, dimensions, size), grand total (processed/skipped/errors/total size), and the failed-files list with reasons. Run tests to confirm they fail.
-  - [ ] 8.8 Implement the reporting output and run the tests until they pass.
+- [x] 8.0 Wire orchestration: walk folder → process each → drive progress spinner → write to `processed/` → report (TDD)
+  - [x] 8.1 Write failing tests for folder walking: lists top-level files only, filters to supported formats, and sorts deterministically. Run tests to confirm they fail.
+  - [x] 8.2 Implement the folder walk and run the tests until they pass.
+  - [x] 8.3 Write failing tests for the output pipeline: creates `<source-dir>/processed/` if missing, resolves collisions via the naming module, writes to a temp file then renames into place, processes with bounded concurrency (sequential or a small pool — never `Promise.all` over the whole folder), and never modifies source files. Run tests to confirm they fail.
+  - [x] 8.4 Implement the output pipeline and run the tests until they pass.
+  - [x] 8.5 Write failing tests for the progress spinner wiring with a mocked spinner: the spinner message updates once per file using `formatProgress` with correct position and running counts, the spinner stops before the final report prints, and a cancelled run stops the spinner with no partial writes. Run tests to confirm they fail.
+  - [x] 8.6 Implement the spinner wiring and run the tests until they pass.
+  - [x] 8.7 Write failing tests for reporting: per-file summary (source → output, format, dimensions, size), grand total (processed/skipped/errors/total size), and the failed-files list with reasons. Run tests to confirm they fail.
+  - [x] 8.8 Implement the reporting output and run the tests until they pass.
 - [ ] 9.0 Add fixtures + end-to-end smoke test; run the full gate
   - [ ] 9.1 Create small fixture images in `tests/fixtures/` (JPEG, PNG, WebP, TIFF, plus one GIF to exercise the skip path).
   - [ ] 9.2 Write `src/pipeline.test.ts`, an end-to-end test that runs the full pipeline on the fixtures and asserts the expected number of outputs, correct filenames, and that `processed/` contains only expected files.

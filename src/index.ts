@@ -1,10 +1,23 @@
-import { readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
+import path from "node:path";
 
-import { cancel, confirm, isCancel, log, select, text } from "@clack/prompts";
+import {
+  cancel,
+  confirm,
+  intro,
+  isCancel,
+  log,
+  outro,
+  select,
+  spinner,
+  text,
+} from "@clack/prompts";
 
-import type { ProcessOptions } from "./process.ts";
-
+import { buildOutputName, resolveCollision } from "./naming.ts";
+import { formatProgress } from "./progress.ts";
 import type { OutputFormat } from "./quality.ts";
+import { processImage, type ProcessOptions } from "./process.ts";
+
 import type { ResizeAxis } from "./resize.ts";
 
 export const CANCEL = Symbol.for("clack:cancel");
@@ -169,6 +182,7 @@ export function summaryText(dir: string, config: PromptConfig): string {
 }
 
 export function formatCap(capBytes: number): string {
+  if (capBytes === 0) return "0 KB";
   if (capBytes % (1024 * 1024) === 0) {
     return `${capBytes / (1024 * 1024)} MB`;
   }
@@ -191,4 +205,234 @@ export function toProcessOptions(config: PromptConfig): ProcessOptions {
     ...(config.resize ? { resize: config.resize } : {}),
     ...(config.capBytes !== null ? { capBytes: config.capBytes } : {}),
   };
+}
+
+export async function listImages(dir: string): Promise<string[]> {
+  const entries = await readdir(dir);
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (!SUPPORTED_EXTENSIONS.has(extOf(entry))) continue;
+    let info;
+    try {
+      info = await stat(path.join(dir, entry));
+    } catch {
+      continue;
+    }
+    if (info.isFile()) {
+      files.push(entry);
+    }
+  }
+  return files.sort();
+}
+
+export interface ProcessedEntry {
+  source: string;
+  output: string;
+  format: OutputFormat;
+  width: number;
+  height: number;
+  size: number;
+  capMet?: boolean;
+  warning?: string;
+}
+
+export interface SkippedEntry {
+  source: string;
+  reason: string;
+}
+
+export interface ErrorEntry {
+  source: string;
+  reason: string;
+}
+
+export interface ProgressCounts {
+  processed: number;
+  skipped: number;
+  errors: number;
+}
+
+export interface ProgressInfo {
+  index: number;
+  total: number;
+  name: string;
+  counts: ProgressCounts;
+}
+
+export interface BatchHooks {
+  onProgress?(info: ProgressInfo): void;
+  isCancelled?(): boolean;
+}
+
+export interface BatchResult {
+  status: "completed" | "cancelled";
+  processed: ProcessedEntry[];
+  skipped: SkippedEntry[];
+  errors: ErrorEntry[];
+  totalOutputBytes: number;
+}
+
+export async function runBatch(
+  dir: string,
+  config: PromptConfig,
+  hooks: BatchHooks = {},
+): Promise<BatchResult> {
+  const processedDir = path.join(dir, "processed");
+  await mkdir(processedDir, { recursive: true });
+
+  const result: BatchResult = {
+    status: "completed",
+    processed: [],
+    skipped: [],
+    errors: [],
+    totalOutputBytes: 0,
+  };
+
+  const names = await listImages(dir);
+  const usedNames: string[] = [];
+  const options = toProcessOptions(config);
+
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i]!;
+    const counts: ProgressCounts = {
+      processed: result.processed.length,
+      skipped: result.skipped.length,
+      errors: result.errors.length,
+    };
+    hooks.onProgress?.({ index: i + 1, total: names.length, name, counts });
+    if (hooks.isCancelled?.()) {
+      result.status = "cancelled";
+      break;
+    }
+
+    const outName = resolveCollision(
+      buildOutputName(name, {
+        prefix: config.prefix,
+        suffix: config.suffix,
+        ext: "." + config.format,
+      }),
+      usedNames,
+    );
+    try {
+      const res = await processImage(
+        path.join(dir, name),
+        path.join(processedDir, outName),
+        options,
+      );
+      if (res.status === "ok") {
+        result.processed.push({
+          source: name,
+          output: outName,
+          format: res.format,
+          width: res.width,
+          height: res.height,
+          size: res.size,
+          ...(res.capMet !== undefined ? { capMet: res.capMet } : {}),
+          ...(res.warning !== undefined ? { warning: res.warning } : {}),
+        });
+        usedNames.push(outName);
+        result.totalOutputBytes += res.size;
+      } else {
+        result.skipped.push({ source: name, reason: res.reason });
+      }
+    } catch (error) {
+      result.errors.push({ source: name, reason: (error as Error).message });
+    }
+  }
+
+  return result;
+}
+
+export interface SpinnerLike {
+  start(msg?: string): void;
+  stop(msg?: string): void;
+  cancel(msg?: string): void;
+  message(msg?: string): void;
+  readonly isCancelled: boolean;
+}
+
+export async function runWithSpinner(
+  dir: string,
+  config: PromptConfig,
+  spinner: SpinnerLike,
+): Promise<BatchResult> {
+  spinner.start("Processing...");
+  const result = await runBatch(dir, config, {
+    onProgress: (info) => {
+      spinner.message(formatProgress(info.index, info.total, info.name, info.counts));
+    },
+    isCancelled: () => spinner.isCancelled,
+  });
+  if (result.status === "cancelled") {
+    spinner.cancel("Cancelled.");
+  } else {
+    spinner.stop("Done.");
+  }
+  return result;
+}
+
+export function renderReport(result: BatchResult): string {
+  const lines: string[] = [
+    `Processed ${result.processed.length}, skipped ${result.skipped.length}, errors ${result.errors.length}`,
+  ];
+  for (const p of result.processed) {
+    const capNote = p.capMet === false ? " (cap not met)" : "";
+    const warnNote = p.warning !== undefined ? ` — ${p.warning}` : "";
+    lines.push(
+      `  ${p.source} -> ${p.output} (${p.format}, ${p.width}x${p.height}, ${formatCap(p.size)})${capNote}${warnNote}`,
+    );
+  }
+  for (const s of result.skipped) {
+    lines.push(`  ${s.source} -> skipped: ${s.reason}`);
+  }
+  for (const e of result.errors) {
+    lines.push(`  ${e.source} -> error: ${e.reason}`);
+  }
+  lines.push(`Total output: ${formatCap(result.totalOutputBytes)}`);
+  if (result.skipped.length + result.errors.length > 0) {
+    lines.push("");
+    lines.push("Failed files:");
+    for (const s of result.skipped) {
+      lines.push(`  - ${s.source}: ${s.reason}`);
+    }
+    for (const e of result.errors) {
+      lines.push(`  - ${e.source}: ${e.reason}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export async function main(): Promise<void> {
+  intro("squooshy");
+
+  const dir = await promptInputDirectory();
+  if (dir === CANCEL) {
+    outro("Cancelled.");
+    return;
+  }
+  const config = await promptConfig();
+  if (config === CANCEL) {
+    outro("Cancelled.");
+    return;
+  }
+  const confirmed = await confirmSummary(dir, config);
+  if (confirmed !== true) {
+    outro("Cancelled.");
+    return;
+  }
+
+  const result = await runWithSpinner(dir, config, spinner());
+  if (result.status === "cancelled") {
+    outro("Cancelled.");
+    return;
+  }
+  console.log(renderReport(result));
+  outro("Done.");
+}
+
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
 }
