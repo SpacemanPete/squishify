@@ -2,6 +2,7 @@
   "name": "squooshy",
   "version": "0.1.0",
   "description": "Interactive CLI that batch-processes a folder of images for a design -> product workflow",
+  "private": true,
   "type": "module",
   "engines": {
     "node": ">=24"
