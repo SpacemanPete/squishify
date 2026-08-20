@@ -8,7 +8,7 @@ An interactive CLI that batch-processes a folder of images for a design → prod
 
 - **Interactive prompts** — input folder, resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
 - **Live progress** — a spinner updates once per file (`Processing 12/24 — hero.png (processed 9, skipped 1, errors 2)`) so you can monitor long batches; rendered to stderr so stdout carries only the final report.
-- **Resize to fit** — constrain max width *or* max height; aspect ratio is always preserved, and images already smaller than the target are left alone rather than upscaled.
+- **Resize to fit** — constrain max width _or_ max height; aspect ratio is always preserved, and images already smaller than the target are left alone rather than upscaled.
 - **Format conversion** — WebP, JPEG, PNG, or AVIF output.
 - **Per-file size cap** — encodes at quality 80, then steps down by 10 to a floor of 20 until the file fits the cap; warns if the cap can't be met. Skipped for PNG (lossless output ignores quality).
 - **Consistent naming** — `[prefix]<original-name>[suffix].<ext>`, with `-1`, `-2`, … appended on collision instead of overwriting.
@@ -76,17 +76,17 @@ No GUI, watch mode, cloud/CMS upload, pure-rename mode, ICC/color-profile handli
 
 ## Scripts
 
-| Script | Does |
-|---|---|
-| `pnpm dev` | Run the interactive CLI directly (`node src/index.ts`) |
-| `pnpm start` | Alias for `dev` |
-| `pnpm check` | Typecheck (`tsc -p tsconfig.json`) |
-| `pnpm build` | Emit to `dist/` (`tsc -p tsconfig.build.json`) |
-| `pnpm test` | Run the test suite with coverage (Vitest) |
-| `pnpm lint` | Lint (ESLint, type-aware, `--max-warnings 0`) |
-| `pnpm format` | Format with Prettier |
-| `pnpm format:check` | Verify formatting |
-| `pnpm verify` | Aggregate gate: check + lint + format:check + test + build |
+| Script              | Does                                                       |
+| ------------------- | ---------------------------------------------------------- |
+| `pnpm dev`          | Run the interactive CLI directly (`node src/index.ts`)     |
+| `pnpm start`        | Alias for `dev`                                            |
+| `pnpm check`        | Typecheck (`tsc -p tsconfig.json`)                         |
+| `pnpm build`        | Emit to `dist/` (`tsc -p tsconfig.build.json`)             |
+| `pnpm test`         | Run the test suite with coverage (Vitest)                  |
+| `pnpm lint`         | Lint (ESLint, type-aware, `--max-warnings 0`)              |
+| `pnpm format`       | Format with Prettier                                       |
+| `pnpm format:check` | Verify formatting                                          |
+| `pnpm verify`       | Aggregate gate: check + lint + format:check + test + build |
 
 ## Project layout
 
