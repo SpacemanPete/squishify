@@ -61,8 +61,8 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 1.5 Write `README.md` with setup, usage, and a short example run.
   - [x] 1.6 Create a trivial placeholder module + placeholder test and verify `pnpm verify` passes, confirming the harness works.
 - [ ] 2.0 Implement `src/naming.ts` — filename builder + collision resolution (Track A)
-  - [ ] 2.1 Write failing tests in `src/naming.test.ts` for `buildOutputName`: prefix-only, suffix-only, both, neither, and extension swap (e.g., `image.png` + `prod-` + `-web` + `.webp` → `prod-image-web.webp`). Run tests to confirm they fail.
-  - [ ] 2.2 Implement `buildOutputName(originalName, { prefix, suffix, ext })` and run the tests until they pass.
+  - [x] 2.1 Write failing tests in `src/naming.test.ts` for `buildOutputName`: prefix-only, suffix-only, both, neither, and extension swap (e.g., `image.png` + `prod-` + `-web` + `.webp` → `prod-image-web.webp`). Run tests to confirm they fail.
+  - [x] 2.2 Implement `buildOutputName(originalName, { prefix, suffix, ext })` and run the tests until they pass.
   - [ ] 2.3 Write failing tests in `src/naming.test.ts` for `resolveCollision`: no collision returns name unchanged, one collision appends `-1`, multiple collisions append `-2`, `-3`, … Run tests to confirm they fail.
   - [ ] 2.4 Implement `resolveCollision(name, existingNames)` — takes the existing names as an argument rather than reading the directory — and run the tests until they pass.
 - [ ] 3.0 Implement `src/progress.ts` — progress message formatter (Track C)
