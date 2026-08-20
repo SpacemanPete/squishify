@@ -76,6 +76,7 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 5.2 Implement `findQualityUnderCap(buffer, format, capBytes, { start = 80, step = 10, floor = 20 })` and run the tests until they pass.
   - [x] 5.3 Write failing tests for the PNG + cap rule: with a cap set and PNG output, the function warns and skips the quality loop, returning full-quality output. Run tests to confirm they fail.
   - [x] 5.4 Implement the PNG cap-skip behavior and run the tests until they pass.
+  - [x] 5.5 Review fixes: `QualityResult` gains an optional `warning` field (replaces `console.warn` in the core module — the shell surfaces warnings), the cap loop always runs at least once (`start` below `floor` clamps to `floor`, `step` clamped to ≥ 1), and the reported quality always matches the attempted encode when the step misses the floor. Tests updated + extended; `pnpm verify` passes.
 - [ ] 6.0 Implement `src/process.ts` — shell: resize, convert, and skip logic (Track B)
   - [ ] 6.1 Write failing tests in `src/process.test.ts` using real fixture images (fixtures over mocks — do not mock sharp): resize applies `shouldResize` results correctly, conversion to each output format (JPEG/WebP/AVIF/PNG) yields the right output mime/format and extension, and the cap loop writes the `findQualityUnderCap` result. Run tests to confirm they fail.
   - [ ] 6.2 Implement `processImage` with `sharp` (resize via the pure decision, convert, quality cap) and run the tests until they pass.

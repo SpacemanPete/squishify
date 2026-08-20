@@ -6,6 +6,7 @@ export interface QualityResult {
   met: boolean;
   quality: number;
   buffer: Buffer;
+  warning?: string;
 }
 
 export interface QualityOptions {
@@ -21,17 +22,24 @@ export async function findQualityUnderCap(
   { start = 80, step = 10, floor = 20 }: QualityOptions = {},
 ): Promise<QualityResult> {
   if (format === "png") {
-    console.warn("PNG output is lossless; skipping quality cap");
     const encoded = await sharp(buffer).png().toBuffer();
-    return { met: encoded.byteLength <= capBytes, quality: 100, buffer: encoded };
+    return {
+      met: encoded.byteLength <= capBytes,
+      quality: 100,
+      buffer: encoded,
+      warning: "PNG output is lossless; skipping quality cap",
+    };
   }
-  let floorResult: QualityResult | undefined;
-  for (let quality = start; quality >= floor; quality -= step) {
+  const stepSize = Math.max(step, 1);
+  let quality = Math.max(start, floor);
+  for (;;) {
     const encoded = await sharp(buffer).toFormat(format, { quality }).toBuffer();
     if (encoded.byteLength <= capBytes) {
       return { met: true, quality, buffer: encoded };
     }
-    floorResult = { met: false, quality: floor, buffer: encoded };
+    if (quality <= floor) {
+      return { met: false, quality, buffer: encoded };
+    }
+    quality -= stepSize;
   }
-  return floorResult as QualityResult;
 }
