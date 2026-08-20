@@ -7,6 +7,7 @@ An interactive CLI that batch-processes a folder of images for a design → prod
 ## Features
 
 - **Interactive prompts** — input folder, resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
+- **Live progress** — a spinner updates once per file (`Processing 12/24 — hero.png (processed 9, skipped 1, errors 2)`) so you can monitor long batches; rendered to stderr so stdout carries only the final report.
 - **Resize to fit** — constrain max width *or* max height; aspect ratio is always preserved, and images already smaller than the target are left alone rather than upscaled.
 - **Format conversion** — WebP, JPEG, PNG, or AVIF output.
 - **Per-file size cap** — encodes at quality 80, then steps down by 10 to a floor of 20 until the file fits the cap; warns if the cap can't be met. Skipped for PNG (lossless output ignores quality).
@@ -54,9 +55,13 @@ Summary:
   Naming: prod-<name>-web.webp
 
 Process 24 images? [y/N]
+╭─ Processing 12/24 — hero.png (processed 9, skipped 1, errors 2) ╮
+╰─ spinner updates once per file while processing                 ╯
+
+Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
 ```
 
-`image.png` becomes `~/design/exports/processed/prod-image-web.webp`.
+`image.png` becomes `~/design/exports/processed/prod-image-web.webp`. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
 
 ## Supported formats
 
@@ -86,19 +91,20 @@ No GUI, watch mode, cloud/CMS upload, pure-rename mode, ICC/color-profile handli
 ## Project layout
 
 ```
-src/index.ts       prompt flow + orchestration (shell)
+src/index.ts       prompt flow + orchestration + progress spinner (shell)
 src/process.ts     resize, convert, quality-cap loop, temp-file writes (shell)
 src/naming.ts      output filename + collision resolution (pure)
 src/resize.ts      resize decision + dimension math (pure)
 src/quality.ts     quality-cap loop (pure)
+src/progress.ts    progress message formatter (pure)
 src/*.test.ts      unit tests (colocated)
 src/pipeline.test.ts  end-to-end smoke test
 tests/fixtures/    sample images for the end-to-end test
 dist/              build output (gitignored)
 ```
 
-Pure core modules (`naming.ts`, `resize.ts`, `quality.ts`) are the coverage-measured surface; `process.ts` and `index.ts` are thin shells over them.
+Pure core modules (`naming.ts`, `resize.ts`, `quality.ts`, `progress.ts`) are the coverage-measured surface; `process.ts` and `index.ts` are thin shells over them.
 
-Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and [@clack/prompts](https://github.com/bombshell-dev/clack) for the prompt flow.
+Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and [@clack/prompts](https://github.com/bombshell-dev/clack) for the prompt flow and progress spinner.
 
 This project follows the portfolio's Node + TypeScript house standard (`.agents/AGENTS-NODE.md`): Node 24, pnpm, ESM with on-disk `.ts` import extensions, functional core / imperative shell, and a `pnpm verify` quality gate.

@@ -19,6 +19,7 @@ A standalone interactive command-line application that walks the user through a 
 5. Support runtime selection of output format from a menu: WebP, JPEG, PNG, AVIF.
 6. Output predictable filenames via a user-supplied prefix, suffix, or both (e.g. `prod-` / `-web`).
 7. Print a clear summary at the end: files processed, skipped, errors, and resulting sizes.
+8. Show live progress while processing so the user can monitor a long batch run.
 
 ---
 
@@ -50,6 +51,14 @@ As a developer with a page-weight budget, I want every image under a specific si
 
 - I set a cap such as 500 KB.
 - The tool encodes at high quality first, then re-encodes at progressively lower quality until the file fits under the cap, stopping at a quality floor (e.g. 20) and reporting if the cap cannot be met.
+
+### Design lead — batch monitoring
+
+As a user running a large batch, I want to see what the tool is doing right now — which file it's on, how far through the batch it is, and how many files have succeeded, been skipped, or failed — so that I can spot a stuck or failing run without waiting for the final report.
+
+- While processing, a live spinner shows the current file and a running `i/total` counter with processed/skipped/error counts.
+- The progress display never hides or interferes with the final per-file report.
+- If I cancel mid-run, the progress display disappears cleanly and no partial files remain.
 
 ---
 
@@ -95,10 +104,16 @@ As a developer with a page-weight budget, I want every image under a specific si
 18. The CLI MUST print a grand total: number processed, number skipped, number of errors, and total output size.
 19. The CLI MUST print a list of any files that failed, with the reason, at the end.
 
+### Progress display
+
+20. During processing, the CLI MUST show live progress via an `@clack/prompts` spinner updating once per file, in the form `Processing 12/24 — hero.png (processed 9, skipped 1, errors 2)`.
+21. Progress output MUST go to **stderr** (it is diagnostics, not data). `@clack/prompts` renders to stderr natively, so stdout carries only the final report and stays pipeable (e.g. future `--json`).
+22. The spinner MUST stop cleanly before the final report is printed. On Ctrl-C / cancel during processing, the spinner MUST disappear and the CLI MUST exit with a clean message and no partial writes (consistent with requirement 4).
+
 ### Errors
 
-20. Unsupported or corrupt files MUST be skipped with a logged reason (not crash the whole run).
-21. Permission errors, missing source folder, or an empty folder MUST produce a friendly error and return to the input prompt rather than exiting abruptly.
+23. Unsupported or corrupt files MUST be skipped with a logged reason (not crash the whole run).
+24. Permission errors, missing source folder, or an empty folder MUST produce a friendly error and return to the input prompt rather than exiting abruptly.
 
 ---
 
@@ -125,6 +140,7 @@ As a developer with a page-weight budget, I want every image under a specific si
 - Use ANSI colors only where they aid readability; keep output greppable for scripting (e.g. `--json` flag is a future extension, not required now).
 - Each prompt should show the default option clearly and allow Enter to accept it.
 - *(CLI)* Data to stdout, diagnostics to stderr — this is what makes a tool pipeable.
+- During processing, reuse `@clack/prompts`' `spinner()` for live progress — no new dependency, and it renders to stderr like the rest of the prompt UI. A per-file message (`Processing 12/24 — hero.png (processed 9, skipped 1, errors 2)`) keeps the user oriented on long batches without flooding the scrollback.
 
 ### Functional core, imperative shell
 
@@ -134,14 +150,15 @@ Split the project into pure decision-making and impure effects (per `.agents/AGE
   - `src/naming.ts` — `buildOutputName`, `resolveCollision`.
   - `src/resize.ts` — resize decision: whether a resize is needed, and the target dimensions (or "already fits").
   - `src/quality.ts` — `findQualityUnderCap`: the quality-reduction loop over an in-memory buffer.
+  - `src/progress.ts` — `formatProgress`: formats the live progress message from position, total, current file name, and running counts.
 - **Shell (impure)** — reads input, calls core functions to decide, then performs effects:
   - `src/process.ts` — `processImage`: reads/writes files, calls sharp, temp-file writes.
-  - `src/index.ts` — prompt flow + orchestration (terminal I/O).
+  - `src/index.ts` — prompt flow + orchestration (terminal I/O, including driving the spinner).
 
 Rules this implies:
 
 - **Core and shell do not share a module.** A pure function and an I/O function never live in the same file; the pure half gets its own module so it can sit in the coverage allowlist.
-- **Push I/O out to the caller.** `resolveCollision(name, existingNames)` takes the existing names as an argument instead of calling `readdir`; the shell gathers the directory listing and passes it in. Same pattern for resize: the shell reads dimensions via sharp, the pure function decides.
+- **Push I/O out to the caller.** `resolveCollision(name, existingNames)` takes the existing names as an argument instead of calling `readdir`; the shell gathers the directory listing and passes it in. Same pattern for resize: the shell reads dimensions via sharp, the pure function decides. Same for progress: the shell owns the spinner; `formatProgress` just builds the string.
 - `processImage` never calls `process.exit`; it returns results/errors and lets the shell decide the exit code.
 
 ### Proposed prompt sequence
@@ -165,6 +182,10 @@ Summary:
   Naming: prod-<name>-web.webp
 
 Process 24 images? [y/N]
+╭─ Processing 12/24 — hero.png (processed 9, skipped 1, errors 2) ╮
+╰─ … (spinner updates once per file, to stderr)                    ╯
+
+Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
 ```
 
 ---
@@ -176,16 +197,17 @@ Process 24 images? [y/N]
 | Runtime | Node 24 LTS (`.nvmrc` = `24`, `engines.node` = `">=24"`). Native type stripping runs `src/*.ts` directly — no `tsx`, no loader, no dev/prod mismatch |
 | Package manager | pnpm. Set the `packageManager` field; `pnpm-lock.yaml` is committed and authoritative; CI uses `pnpm install --frozen-lockfile` |
 | Image library | `sharp` (libvips) — pre-approved by house standard, fastest available for batch work, first-class WebP/AVIF encode support |
-| CLI prompts | `@clack/prompts` (recommended) or `inquirer` — one dependency, keep it small |
+| CLI prompts | `@clack/prompts` (recommended) or `inquirer` — one dependency, keep it small; its `spinner()` doubles as the progress display, so no extra progress dependency |
 | Language | TypeScript, ESM only (`"type": "module"`). Imports use the on-disk `.ts` extension (`./mod.ts`); `tsc` rewrites to `.js` on emit. `node:` prefix for builtins; relative imports only; no `paths` aliases; no barrel file |
 | TypeScript config | Two configs: `tsconfig.json` typechecks `src/` + tests + `*.config.ts` (es2023, `nodenext`, `rewriteRelativeImportExtensions`, `verbatimModuleSyntax`, strict + `noUncheckedIndexedAccess`, `noEmit`); `tsconfig.build.json` emits `src/` to `dist/` (declarations + sourcemaps, `*.test.ts` excluded) |
-| Project layout | `src/index.ts` (prompt flow + orchestration), `src/process.ts` (shell), `src/naming.ts` + `src/resize.ts` + `src/quality.ts` (pure core), colocated `src/*.test.ts`, `src/pipeline.test.ts` (e2e smoke), `tests/fixtures/` (sample inputs), `dist/` (gitignored) |
+| Project layout | `src/index.ts` (prompt flow + orchestration), `src/process.ts` (shell), `src/naming.ts` + `src/resize.ts` + `src/quality.ts` + `src/progress.ts` (pure core), colocated `src/*.test.ts`, `src/pipeline.test.ts` (e2e smoke), `tests/fixtures/` (sample inputs), `dist/` (gitignored) |
 | Scripts | `dev` → `node src/index.ts`; `check` → `tsc -p tsconfig.json`; `build` → `tsc -p tsconfig.build.json`; `test` → `vitest run --coverage`; `lint` → `eslint . --max-warnings 0`; `format` → `prettier --write .`; `format:check` → `prettier --check .`; `verify` → `pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build` |
 | Lint/format | ESLint flat config, type-aware (`typescript-eslint` `recommendedTypeChecked`, `no-floating-promises`, `consistent-type-imports`, `--max-warnings 0`); Prettier (semi, double quotes, trailing commas, print width 88) with `.prettierignore` (`dist/`, `coverage/`, `node_modules/`, `pnpm-lock.yaml`) |
-| Testing | Vitest, no globals, table-driven tests for core functions, fixtures over mocks at the I/O boundary. Coverage (v8) folded into `test`: allowlist `src/naming.ts`, `src/resize.ts`, `src/quality.ts`; thresholds lines/functions 90, branches 85. **Every new pure core module must be added to `coverage.include`** |
+| Testing | Vitest, no globals, table-driven tests for core functions, fixtures over mocks at the I/O boundary. Coverage (v8) folded into `test`: allowlist `src/naming.ts`, `src/resize.ts`, `src/quality.ts`, `src/progress.ts`; thresholds lines/functions 90, branches 85. **Every new pure core module must be added to `coverage.include`** |
 | Naming logic | Pure: `buildOutputName(original, {prefix, suffix, ext})` → `[prefix]<base>[suffix].ext`; collision resolution via `resolveCollision(name, existingNames)` |
 | Resize decision | Pure: `shouldResize(width, height, maxDimension, axis)` → target dimensions or "already fits" (no upscaling) |
 | Quality loop | Pure: `findQualityUnderCap(buffer, format, capBytes, {start=80, step=10, floor=20})` → quality level + final buffer |
+| Progress display | `@clack/prompts` `spinner()` driven per file; message built by pure `formatProgress(index, total, currentName, {processed, skipped, errors})`; renders to stderr; stopped before the final report and on cancel |
 | Concurrency | Process files sequentially or with a small bounded pool (e.g. 4). Never `Promise.all` over the whole folder — bounded concurrency is a house rule |
 | Errors/async | `catch` binds `unknown` and narrows before use; preserve `cause` when rethrowing; `AbortSignal` for anything cancellable (Ctrl-C); no floating promises (lint-enforced) |
 | Exit codes | Exit non-zero on failure, set in the shell only; a pure function never calls `process.exit` |
@@ -198,12 +220,13 @@ Process 24 images? [y/N]
 - `vitest.config.ts` — include `src/**/*.test.ts`; coverage allowlist + thresholds
 - `eslint.config.js` — flat config, type-aware (`allowDefaultProject` lists only `eslint.config.js`)
 - `.prettierrc` / `.prettierignore`
-- `src/index.ts` — prompt flow + orchestration (shell)
+- `src/index.ts` — prompt flow + orchestration, drives the progress spinner (shell)
 - `src/process.ts` — per-image processing: resize, convert, cap loop, temp-file writes (shell)
 - `src/naming.ts` — output filename + collision logic (pure)
 - `src/resize.ts` — resize decision + dimension math (pure)
 - `src/quality.ts` — quality-cap loop (pure)
-- `src/naming.test.ts` / `src/resize.test.ts` / `src/quality.test.ts` — unit tests (colocated, TDD)
+- `src/progress.ts` — progress message formatter (pure)
+- `src/naming.test.ts` / `src/resize.test.ts` / `src/quality.test.ts` / `src/progress.test.ts` — unit tests (colocated, TDD)
 - `src/pipeline.test.ts` — end-to-end smoke test over `tests/fixtures/`
 - `tests/fixtures/` — sample source images (JPEG, PNG, WebP, TIFF, one GIF)
 - `README.md` — usage + example run
@@ -220,6 +243,7 @@ Process 24 images? [y/N]
 | Safety | Original files are byte-identical after a run (hash check on a sample) |
 | Speed | A 50-image JPEG batch (≈4 MB each) completes in under ~10 seconds on a mid-range laptop |
 | UX | Prompt flow completable end-to-end with defaults alone in ≤ 60 seconds |
+| Progress | A 24-image run shows a live per-file spinner counter (`i/total` + running processed/skipped/errors) that updates during processing; stdout contains only the final report |
 | Quality | `pnpm verify` exits 0 from the project root; `node dist/index.js` runs the CLI from the built output |
 
 ---
@@ -255,6 +279,10 @@ Do not report a task done on a subset of these; if one fails for a reason outsid
 8. **Coverage gate:** allowlist of pure core modules, thresholds 90/90/85, folded into `pnpm test` (A).
 9. **e2e smoke test:** lives in `src/pipeline.test.ts` so the Vitest `include` (`src/**/*.test.ts`) covers it; `tests/` holds fixtures only (A).
 
+*Resolved during progress-display kickoff (2026-08-19):*
+
+10. **Progress display:** `@clack/prompts` `spinner()` driven per file — no new dependency (A). Message form is pure `src/progress.ts` (`formatProgress`), rendering to stderr so stdout stays pipeable; spinner stops before the final report and on cancel (A).
+
 *No remaining open questions.*
 
 ---
@@ -265,8 +293,9 @@ Do not report a task done on a subset of these; if one fails for a reason outsid
 2. Implement `src/naming.ts` (+ tests) — filename builder + collision resolution (pure).
 3. Implement `src/resize.ts` (+ tests) — resize decision + dimension math (pure).
 4. Implement `src/quality.ts` (+ tests) — quality-cap loop incl. PNG cap-skip rule (pure).
-5. Implement `src/process.ts` — shell: resize, convert, cap loop, temp-file writes.
-6. Implement `src/index.ts` prompt flow — ordered questions, validation, summary confirm, cancel/error handling.
-7. Wire orchestration: walk folder → process each → write to `processed/` → report summary.
-8. Add a sample fixture set + `src/pipeline.test.ts` end-to-end smoke test.
-9. Run `pnpm verify` and manually smoke-run on a real image folder; confirm `node dist/index.js` runs the built CLI.
+5. Implement `src/progress.ts` (+ tests) — progress message formatter (pure).
+6. Implement `src/process.ts` — shell: resize, convert, cap loop, temp-file writes.
+7. Implement `src/index.ts` prompt flow — ordered questions, validation, summary confirm, cancel/error handling.
+8. Wire orchestration: walk folder → process each → drive progress spinner → write to `processed/` → report summary.
+9. Add a sample fixture set + `src/pipeline.test.ts` end-to-end smoke test.
+10. Run `pnpm verify` and manually smoke-run on a real image folder; confirm `node dist/index.js` runs the built CLI.
