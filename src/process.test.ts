@@ -1,11 +1,21 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import sharp from "sharp";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { processImage } from "./process.ts";
+
+vi.mock("node:fs/promises", async () => {
+  const actual = await import("node:fs/promises");
+  return {
+    ...actual,
+    rename: vi.fn(actual.rename),
+    writeFile: vi.fn(actual.writeFile),
+    mkdtemp: vi.fn(actual.mkdtemp),
+  };
+});
 
 const FIXTURES = path.resolve("tests/fixtures");
 
@@ -18,6 +28,7 @@ async function tempOutDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.clearAllMocks();
   await Promise.all(tempDirs.map((d) => rm(d, { recursive: true, force: true })));
   tempDirs = [];
 });
@@ -112,6 +123,26 @@ describe("processImage", () => {
     expect(result.size).toBeLessThanOrEqual(cap);
     expect((await readFile(out)).byteLength).toBeLessThanOrEqual(cap);
   });
+
+  it("applies resize AND the size cap together", async () => {
+    const src = path.join(FIXTURES, "photo.jpg");
+    const at80 = await sharp(src)
+      .resize({ width: 2000 })
+      .toFormat("webp", { quality: 80 })
+      .toBuffer();
+    const cap = at80.length + 100;
+    const dir = await tempOutDir();
+    const out = path.join(dir, "out.webp");
+    const result = await processImage(src, out, {
+      format: "webp",
+      resize: { axis: "width", maxDimension: 2000 },
+      capBytes: cap,
+    });
+    if (result.status !== "ok") throw new Error("expected ok");
+    expect(result.width).toBeLessThanOrEqual(2000);
+    expect(result.capMet).toBe(true);
+    expect(result.size).toBeLessThanOrEqual(cap);
+  }, 30_000);
 });
 
 describe("skip logic", () => {
@@ -144,6 +175,52 @@ describe("skip logic", () => {
     if (result.status !== "skipped") throw new Error("expected skipped");
     expect(result.reason).toMatch(/^unreadable:/);
     await expect(readFile(path.join(dir, "out.webp"))).rejects.toThrow();
+  });
+});
+
+describe("writeTempAndRename (via processImage)", () => {
+  it("writes the temp file next to the output, then renames it into place", async () => {
+    const dir = await tempOutDir();
+    const out = path.join(dir, "out.webp");
+    const result = await processImage(path.join(FIXTURES, "photo.jpg"), out, {
+      format: "webp",
+    });
+    if (result.status !== "ok") throw new Error("expected ok");
+
+    expect(
+      vi.mocked(mkdtemp).mock.calls.some(([prefix]) => String(prefix).includes("squooshy-write")),
+    ).toBe(false);
+    const writeTarget = vi.mocked(writeFile).mock.calls[0]?.[0];
+    expect(typeof writeTarget).toBe("string");
+    const renameCall = vi.mocked(rename).mock.calls[0];
+    const renameFrom = renameCall?.[0];
+    const renameTo = renameCall?.[1];
+    expect(typeof renameFrom).toBe("string");
+    expect(typeof renameTo).toBe("string");
+    if (
+      typeof writeTarget !== "string" ||
+      typeof renameFrom !== "string" ||
+      typeof renameTo !== "string"
+    ) {
+      throw new Error("fs calls should receive string paths");
+    }
+    expect(writeTarget.startsWith(out + ".tmp")).toBe(true);
+    expect(renameFrom).toBe(writeTarget);
+    expect(renameTo).toBe(out);
+  });
+
+  it("removes the temp file when the write fails", async () => {
+    const dir = await tempOutDir();
+    const out = path.join(dir, "out.webp");
+    vi.mocked(rename).mockImplementationOnce(() =>
+      Promise.reject(new Error("EXDEV: cross-device link")),
+    );
+
+    await expect(
+      processImage(path.join(FIXTURES, "photo.jpg"), out, { format: "webp" }),
+    ).rejects.toThrow("EXDEV");
+
+    expect(await readdir(dir)).toEqual([]);
   });
 });
 

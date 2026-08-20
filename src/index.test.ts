@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  text: vi.fn<() => Promise<unknown>>(),
+  text: vi.fn<(options?: unknown) => Promise<unknown>>(),
   select: vi.fn<() => Promise<unknown>>(),
   confirm: vi.fn<() => Promise<unknown>>(),
   cancel: vi.fn(),
@@ -162,6 +162,30 @@ describe("promptConfig", () => {
     expect(config.capBytes).toBe(2 * 1024 * 1024);
   });
 
+  it("rejects path separators in prefix and suffix via prompt validation", async () => {
+    const seen: {
+      validate?: (value: string | undefined) => string | undefined;
+    }[] = [];
+    mocks.text.mockImplementation((opts) => {
+      seen.push(opts as { validate?: (value: string | undefined) => string | undefined });
+      return Promise.resolve("ok");
+    });
+    mocks.confirm.mockResolvedValue(false);
+    mocks.select.mockResolvedValue("jpeg");
+    mocks.confirm.mockResolvedValue(false);
+
+    const config = await promptConfig();
+    if (config === CANCEL) throw new Error("expected config");
+
+    const [prefix, suffix] = seen;
+    expect(prefix?.validate?.("../evil")).toBeTruthy();
+    expect(prefix?.validate?.("a/b")).toBeTruthy();
+    expect(prefix?.validate?.("a\\b")).toBeTruthy();
+    expect(prefix?.validate?.("prod-")).toBeUndefined();
+    expect(suffix?.validate?.("..")).toBeTruthy();
+    expect(suffix?.validate?.("-web")).toBeUndefined();
+  });
+
   it("returns CANCEL when the user cancels mid-sequence", async () => {
     mocks.confirm.mockResolvedValueOnce(Symbol.for("clack:cancel"));
     await expect(promptConfig()).resolves.toBe(CANCEL);
@@ -296,6 +320,7 @@ describe("listImages", () => {
       await writeFile(path.join(dir, name), "x");
     }
     await expect(listImages(dir)).resolves.toEqual([
+      "a.gif",
       "b.PNG",
       "d.webp",
       "e.avif",
@@ -354,6 +379,17 @@ describe("runBatch", () => {
     expect(result.processed[0]?.format).toBe("webp");
   });
 
+  it("reports GIF files as skipped with `unsupported format: gif`", async () => {
+    const dir = await makeDir({ "photo.gif": "photo.gif", "photo.jpg": "photo.jpg" });
+    const result = await runBatch(dir, minimal);
+    expect(result.processed).toHaveLength(1);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]).toEqual({
+      source: "photo.gif",
+      reason: "unsupported format: gif",
+    });
+  });
+
   it("reports skipped files with reasons and keeps going", async () => {
     const dir = await makeDir({ "photo.jpg": "photo.jpg", "corrupt.jpg": "corrupt.jpg" });
     const result = await runBatch(dir, minimal);
@@ -361,6 +397,20 @@ describe("runBatch", () => {
     expect(result.skipped).toHaveLength(1);
     expect(result.skipped[0]?.source).toBe("corrupt.jpg");
     expect(result.skipped[0]?.reason).toMatch(/^unreadable:/);
+  });
+
+  it("appends a counter instead of overwriting files from a previous run", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    const processed = path.join(dir, "processed");
+    await mkdir(processed);
+    await writeFile(path.join(processed, "photo.jpeg"), "old output");
+
+    const result = await runBatch(dir, minimal);
+
+    expect(result.processed[0]?.output).toBe("photo-1.jpeg");
+    const outputs = (await readdir(processed)).sort();
+    expect(outputs).toEqual(["photo-1.jpeg", "photo.jpeg"]);
+    expect(await readFile(path.join(processed, "photo.jpeg"), "utf8")).toBe("old output");
   });
 
   it("never modifies source files", async () => {
@@ -471,10 +521,13 @@ describe("runWithSpinner", () => {
   });
 });
 
-it("rounds fractional KB sizes to one decimal", () => {
-  expect(formatCap(132632)).toBe("129.5 KB");
-  expect(formatCap(245 * 1024)).toBe("245 KB");
+describe("formatCap", () => {
+  it("rounds fractional KB sizes to one decimal", () => {
+    expect(formatCap(132632)).toBe("129.5 KB");
+    expect(formatCap(245 * 1024)).toBe("245 KB");
+  });
 });
+
 describe("renderReport", () => {
   it("renders per-file summaries, grand totals, and the failed-files list", () => {
     const result: BatchResult = {

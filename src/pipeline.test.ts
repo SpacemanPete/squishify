@@ -52,8 +52,9 @@ describe("end-to-end pipeline over fixtures", () => {
       "photo-3.webp",
       "photo.webp",
     ]);
-    expect(result.skipped.map((s) => s.source)).toEqual(["corrupt.jpg"]);
+    expect(result.skipped.map((s) => s.source)).toEqual(["corrupt.jpg", "photo.gif"]);
     expect(result.skipped[0]?.reason).toMatch(/^unreadable:/);
+    expect(result.skipped[1]?.reason).toBe("unsupported format: gif");
     expect(result.errors).toHaveLength(0);
 
     const outputs = (await readdir(path.join(dir, "processed"))).sort();

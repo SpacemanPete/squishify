@@ -14,7 +14,7 @@ import {
 } from "@clack/prompts";
 
 import { buildOutputName, resolveCollision } from "./naming.ts";
-import { formatProgress } from "./progress.ts";
+import { formatProgress, type ProgressCounts } from "./progress.ts";
 import type { OutputFormat } from "./quality.ts";
 import { processImage, type ProcessOptions } from "./process.ts";
 
@@ -22,7 +22,16 @@ import type { ResizeAxis } from "./resize.ts";
 
 export const CANCEL = Symbol.for("clack:cancel");
 
-export const SUPPORTED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif", "tif", "tiff"]);
+export const SUPPORTED_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "avif",
+  "tif",
+  "tiff",
+  "gif",
+]);
 
 export async function promptInputDirectory(): Promise<string | typeof CANCEL> {
   for (;;) {
@@ -151,7 +160,12 @@ async function promptCap(): Promise<number | null | typeof CANCEL> {
 }
 
 async function promptText(message: string, placeholder: string): Promise<string | typeof CANCEL> {
-  const value = await text({ message, placeholder });
+  const value = await text({
+    message,
+    placeholder,
+    validate: (input) =>
+      /[/\\]|\.\./.test(input ?? "") ? "Must not contain path separators (/, \\, ..)." : undefined,
+  });
   if (isCancel(value)) return cancelRun();
   return String(value).trim();
 }
@@ -247,12 +261,6 @@ export interface ErrorEntry {
   reason: string;
 }
 
-export interface ProgressCounts {
-  processed: number;
-  skipped: number;
-  errors: number;
-}
-
 export interface ProgressInfo {
   index: number;
   total: number;
@@ -290,7 +298,13 @@ export async function runBatch(
   };
 
   const names = await listImages(dir);
-  const usedNames: string[] = [];
+  let existing: string[];
+  try {
+    existing = await readdir(processedDir);
+  } catch {
+    existing = [];
+  }
+  const usedNames = existing;
   const options = toProcessOptions(config);
 
   for (let i = 0; i < names.length; i++) {
@@ -337,7 +351,10 @@ export async function runBatch(
         result.skipped.push({ source: name, reason: res.reason });
       }
     } catch (error) {
-      result.errors.push({ source: name, reason: (error as Error).message });
+      result.errors.push({
+        source: name,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -408,23 +425,23 @@ export async function main(): Promise<void> {
 
   const dir = await promptInputDirectory();
   if (dir === CANCEL) {
-    outro("Cancelled.");
+    outro();
     return;
   }
   const config = await promptConfig();
   if (config === CANCEL) {
-    outro("Cancelled.");
+    outro();
     return;
   }
   const confirmed = await confirmSummary(dir, config);
   if (confirmed !== true) {
-    outro("Cancelled.");
+    outro();
     return;
   }
 
   const result = await runWithSpinner(dir, config, spinner());
   if (result.status === "cancelled") {
-    outro("Cancelled.");
+    outro();
     return;
   }
   console.log(renderReport(result));

@@ -2,8 +2,6 @@
 
 An interactive CLI that batch-processes a folder of images for a design → product workflow. Answer a few prompts instead of remembering flags, and get back a clean, web-ready set of files in a `processed/` subfolder. Originals are never touched.
 
-> **Status:** specified, not yet implemented. See [tasks/prd-image-batch.md](tasks/prd-image-batch.md) and [tasks/tasks-image-batch.md](tasks/tasks-image-batch.md).
-
 ## Features
 
 - **Interactive prompts** — input folder, resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
@@ -37,28 +35,32 @@ pnpm start
 ### Example run
 
 ```
-? Select a folder of images: ~/design/exports
-? Resize images to fit? yes
-  ? Fit by max width: 2000
-? Output format: WebP
-? Cap each file at a target size? yes
-  ? Max file size: 500 KB
-? Prefix (optional): prod-
-? Suffix (optional): -web
+? Which folder holds your images? ~/design/exports
+? Resize your images? yes
+  ? Fit by what? Width
+  ? Maximum pixels? 2000
+? Output format? WebP
+? Cap the output file size? yes
+  ? Maximum size? 500
+  ? In what unit? Kilobytes (KB)
+? Prefix (optional) prod-
+? Suffix (optional) -web
 
-Summary:
-  Source: ~/design/exports
-  Output: ~/design/exports/processed
-  Resize: fit width ≤ 2000px
-  Format: webp
-  Cap: 500 KB
-  Naming: prod-<name>-web.webp
+Folder:  ~/design/exports
+Format:  webp
+Resize:  fit width to 2000px
+Size cap: 500 KB
+Prefix:  prod-
+Suffix:  -web
 
-Process 24 images? [y/N]
+? Start processing? y
 ╭─ Processing 12/24 — hero.png (processed 9, skipped 1, errors 2) ╮
 ╰─ spinner updates once per file while processing                 ╯
 
-Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
+Processed 24, skipped 1, errors 1
+  hero.png -> prod-hero-web.webp (webp, 2000x1500, 245 KB)
+  ...
+Total output: 2.4 MB
 ```
 
 `image.png` becomes `~/design/exports/processed/prod-image-web.webp`. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
@@ -108,3 +110,5 @@ Pure core modules (`naming.ts`, `resize.ts`, `quality.ts`, `progress.ts`) are th
 Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and [@clack/prompts](https://github.com/bombshell-dev/clack) for the prompt flow and progress spinner.
 
 This project follows the portfolio's Node + TypeScript house standard (`.agents/AGENTS-NODE.md`): Node 24, pnpm, ESM with on-disk `.ts` import extensions, functional core / imperative shell, and a `pnpm verify` quality gate.
+
+**Deliberate divergences from `.agents/AGENTS-NODE.md` (project wins; do not "fix" back):** `tsconfig.json` omits `noUnusedLocals` / `noUnusedParameters` / `noFallthroughCasesInSwitch` / `noImplicitOverride` / `isolatedModules` (type-aware ESLint covers the unused-vars gap); `tsconfig.build.json` omits `rootDir` / `declarationMap` (output lands flat in `dist/` because `include` is `src`); `.prettierrc` uses `printWidth: 100` instead of 88; the `build` script prepends a `rm -rf dist` clean step so stale output is never shipped.

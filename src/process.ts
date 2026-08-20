@@ -1,6 +1,4 @@
-import { mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 
 import sharp, { type Metadata } from "sharp";
 
@@ -37,7 +35,7 @@ export async function processImage(
   }
   const { buffer, metadata } = input.value;
 
-  let pipeline = sharp(buffer);
+  let working = buffer;
   if (resize) {
     const decision = shouldResize(
       metadata.width ?? 0,
@@ -46,7 +44,9 @@ export async function processImage(
       resize.axis,
     );
     if (decision.resize) {
-      pipeline = pipeline.resize({ width: decision.width, height: decision.height });
+      working = await sharp(working)
+        .resize({ width: decision.width, height: decision.height })
+        .toBuffer();
     }
   }
 
@@ -54,12 +54,12 @@ export async function processImage(
   let capMet: boolean | undefined;
   let warning: string | undefined;
   if (capBytes !== undefined) {
-    const result = await findQualityUnderCap(buffer, format, capBytes);
+    const result = await findQualityUnderCap(working, format, capBytes);
     encoded = result.buffer;
     capMet = result.met;
     if (result.warning !== undefined) warning = result.warning;
   } else {
-    encoded = await pipeline.toFormat(format, { quality: 80 }).toBuffer();
+    encoded = await sharp(working).toFormat(format, { quality: 80 }).toBuffer();
   }
 
   await writeTempAndRename(outputPath, encoded);
@@ -87,7 +87,7 @@ async function readInput(
   try {
     buffer = await readFile(inputPath);
   } catch (error) {
-    return { status: "skipped", reason: `unreadable: ${(error as Error).message}` };
+    return { status: "skipped", reason: `unreadable: ${errorMessage(error)}` };
   }
   try {
     const metadata = await sharp(buffer).metadata();
@@ -96,13 +96,20 @@ async function readInput(
     }
     return { status: "ok", value: { buffer, metadata } };
   } catch (error) {
-    return { status: "skipped", reason: `unreadable: ${(error as Error).message}` };
+    return { status: "skipped", reason: `unreadable: ${errorMessage(error)}` };
   }
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function writeTempAndRename(outputPath: string, buffer: Buffer): Promise<void> {
-  const temp = await mkdtemp(path.join(tmpdir(), "squooshy-write-"));
-  const tempFile = path.join(temp, "out");
-  await writeFile(tempFile, buffer);
-  await rename(tempFile, outputPath);
+  const tempFile = `${outputPath}.tmp-${process.pid}`;
+  try {
+    await writeFile(tempFile, buffer);
+    await rename(tempFile, outputPath);
+  } finally {
+    await rm(tempFile, { force: true });
+  }
 }
