@@ -78,8 +78,8 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 5.4 Implement the PNG cap-skip behavior and run the tests until they pass.
   - [x] 5.5 Review fixes: `QualityResult` gains an optional `warning` field (replaces `console.warn` in the core module — the shell surfaces warnings), the cap loop always runs at least once (`start` below `floor` clamps to `floor`, `step` clamped to ≥ 1), and the reported quality always matches the attempted encode when the step misses the floor. Tests updated + extended; `pnpm verify` passes.
 - [ ] 6.0 Implement `src/process.ts` — shell: resize, convert, and skip logic (Track B)
-  - [ ] 6.1 Write failing tests in `src/process.test.ts` using real fixture images (fixtures over mocks — do not mock sharp): resize applies `shouldResize` results correctly, conversion to each output format (JPEG/WebP/AVIF/PNG) yields the right output mime/format and extension, and the cap loop writes the `findQualityUnderCap` result. Run tests to confirm they fail.
-  - [ ] 6.2 Implement `processImage` with `sharp` (resize via the pure decision, convert, quality cap) and run the tests until they pass.
+  - [x] 6.1 Write failing tests in `src/process.test.ts` using real fixture images (fixtures over mocks — do not mock sharp): resize applies `shouldResize` results correctly, conversion to each output format (JPEG/WebP/AVIF/PNG) yields the right output mime/format and extension, and the cap loop writes the `findQualityUnderCap` result. Run tests to confirm they fail.
+  - [x] 6.2 Implement `processImage` with `sharp` (resize via the pure decision, convert, quality cap) and run the tests until they pass.
   - [ ] 6.3 Write failing tests for skip logic: GIF files are skipped with reason `unsupported format: gif`, and unsupported/corrupt files are skipped with a logged reason without throwing. Run tests to confirm they fail.
   - [ ] 6.4 Implement the skip logic and run the tests until they pass.
 - [ ] 7.0 Implement `src/index.ts` — interactive prompt flow (TDD, mocked prompts)
