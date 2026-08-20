@@ -43,7 +43,7 @@ const webpConfig: PromptConfig = {
 describe("end-to-end pipeline over fixtures", () => {
   it("converts every supported fixture and skips corrupt input", async () => {
     const dir = await tempCopyDir();
-    const result = await runBatch(dir, webpConfig);
+    const result = await runBatch(dir, path.join(dir, "processed"), webpConfig);
 
     expect(result.status).toBe("completed");
     expect(result.processed.map((p) => p.output).sort()).toEqual([
@@ -73,7 +73,7 @@ describe("end-to-end pipeline over fixtures", () => {
       before.set(name, await readFile(path.join(dir, name)));
     }
 
-    await runBatch(dir, webpConfig);
+    await runBatch(dir, path.join(dir, "processed"), webpConfig);
 
     for (const [name, buffer] of before) {
       const after = await readFile(path.join(dir, name));
@@ -83,7 +83,10 @@ describe("end-to-end pipeline over fixtures", () => {
 
   it("honors a 500 KB cap or reports it as unmeetable", async () => {
     const dir = await tempCopyDir();
-    const result = await runBatch(dir, { ...webpConfig, capBytes: 500 * 1024 });
+    const result = await runBatch(dir, path.join(dir, "processed"), {
+      ...webpConfig,
+      capBytes: 500 * 1024,
+    });
 
     expect(result.processed).toHaveLength(4);
     for (const p of result.processed) {

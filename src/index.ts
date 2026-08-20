@@ -1,4 +1,5 @@
 import { mkdir, readdir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -9,6 +10,7 @@ import {
   log,
   outro,
   select,
+  path as clackPath,
   spinner,
   text,
 } from "@clack/prompts";
@@ -33,17 +35,24 @@ export const SUPPORTED_EXTENSIONS = new Set([
   "gif",
 ]);
 
+export function expandHome(input: string, homeDir: string = homedir()): string {
+  if (input === "~") return homeDir;
+  if (input.startsWith("~/")) return homeDir + input.slice(1);
+  return input;
+}
+
 export async function promptInputDirectory(): Promise<string | typeof CANCEL> {
   for (;;) {
-    const value = await text({
+    const value = await clackPath({
       message: "Which folder holds your images?",
-      placeholder: "./images",
+      directory: true,
+      root: process.cwd(),
     });
     if (isCancel(value)) {
       cancel("Cancelled.");
       return CANCEL;
     }
-    const dir = String(value).trim();
+    const dir = expandHome(String(value).trim());
     const problem = await findDirProblem(dir);
     if (problem === null) {
       return dir;
@@ -180,13 +189,14 @@ function cancelRun(): typeof CANCEL {
   return CANCEL;
 }
 
-export function summaryText(dir: string, config: PromptConfig): string {
+export function summaryText(dir: string, config: PromptConfig, outDir: string): string {
   const resize = config.resize
     ? `fit ${config.resize.axis} to ${config.resize.maxDimension}px`
     : "no resize";
   const cap = config.capBytes === null ? "no cap" : formatCap(config.capBytes);
   return [
     `Folder:  ${dir}`,
+    `Output:  ${outDir}`,
     `Format:  ${config.format}`,
     `Resize:  ${resize}`,
     `Size cap: ${cap}`,
@@ -207,8 +217,9 @@ export function formatCap(capBytes: number): string {
 export async function confirmSummary(
   dir: string,
   config: PromptConfig,
+  outDir: string,
 ): Promise<boolean | typeof CANCEL> {
-  log.info(summaryText(dir, config));
+  log.info(summaryText(dir, config, outDir));
   const ok = await confirm({ message: "Start processing?", initialValue: false });
   if (isCancel(ok)) return cancelRun();
   return ok;
@@ -238,6 +249,22 @@ export async function listImages(dir: string): Promise<string[]> {
     }
   }
   return files.sort();
+}
+
+export async function pickOutputDir(dir: string): Promise<string> {
+  for (let n = 1; ; n++) {
+    const candidate = path.join(dir, n === 1 ? "processed" : `processed_${n}`);
+    let info;
+    try {
+      info = await stat(candidate);
+    } catch {
+      return candidate;
+    }
+    if (info.isDirectory()) {
+      const entries = await readdir(candidate);
+      if (entries.length === 0) return candidate;
+    }
+  }
 }
 
 export interface ProcessedEntry {
@@ -279,15 +306,16 @@ export interface BatchResult {
   skipped: SkippedEntry[];
   errors: ErrorEntry[];
   totalOutputBytes: number;
+  outputDir: string;
 }
 
 export async function runBatch(
   dir: string,
+  outDir: string,
   config: PromptConfig,
   hooks: BatchHooks = {},
 ): Promise<BatchResult> {
-  const processedDir = path.join(dir, "processed");
-  await mkdir(processedDir, { recursive: true });
+  await mkdir(outDir, { recursive: true });
 
   const result: BatchResult = {
     status: "completed",
@@ -295,16 +323,11 @@ export async function runBatch(
     skipped: [],
     errors: [],
     totalOutputBytes: 0,
+    outputDir: outDir,
   };
 
   const names = await listImages(dir);
-  let existing: string[];
-  try {
-    existing = await readdir(processedDir);
-  } catch {
-    existing = [];
-  }
-  const usedNames = existing;
+  const usedNames: string[] = [];
   const options = toProcessOptions(config);
 
   for (let i = 0; i < names.length; i++) {
@@ -329,11 +352,7 @@ export async function runBatch(
       usedNames,
     );
     try {
-      const res = await processImage(
-        path.join(dir, name),
-        path.join(processedDir, outName),
-        options,
-      );
+      const res = await processImage(path.join(dir, name), path.join(outDir, outName), options);
       if (res.status === "ok") {
         result.processed.push({
           source: name,
@@ -371,11 +390,12 @@ export interface SpinnerLike {
 
 export async function runWithSpinner(
   dir: string,
+  outDir: string,
   config: PromptConfig,
   spinner: SpinnerLike,
 ): Promise<BatchResult> {
   spinner.start("Processing...");
-  const result = await runBatch(dir, config, {
+  const result = await runBatch(dir, outDir, config, {
     onProgress: (info) => {
       spinner.message(formatProgress(info.index, info.total, info.name, info.counts));
     },
@@ -392,6 +412,7 @@ export async function runWithSpinner(
 export function renderReport(result: BatchResult): string {
   const lines: string[] = [
     `Processed ${result.processed.length}, skipped ${result.skipped.length}, errors ${result.errors.length}`,
+    `Output: ${result.outputDir}`,
   ];
   for (const p of result.processed) {
     const capNote = p.capMet === false ? " (cap not met)" : "";
@@ -433,13 +454,14 @@ export async function main(): Promise<void> {
     outro();
     return;
   }
-  const confirmed = await confirmSummary(dir, config);
+  const outDir = await pickOutputDir(dir);
+  const confirmed = await confirmSummary(dir, config, outDir);
   if (confirmed !== true) {
     outro();
     return;
   }
 
-  const result = await runWithSpinner(dir, config, spinner());
+  const result = await runWithSpinner(dir, outDir, config, spinner());
   if (result.status === "cancelled") {
     outro();
     return;

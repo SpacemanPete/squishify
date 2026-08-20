@@ -4,13 +4,13 @@ An interactive CLI that batch-processes a folder of images for a design → prod
 
 ## Features
 
-- **Interactive prompts** — input folder, resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
+- **Interactive prompts** — a type-ahead folder finder (arrow keys to navigate, Tab to complete), resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
 - **Live progress** — a spinner updates once per file (`Processing 12/24 — hero.png (processed 9, skipped 1, errors 2)`) so you can monitor long batches; rendered to stderr so stdout carries only the final report.
 - **Resize to fit** — constrain max width _or_ max height; aspect ratio is always preserved, and images already smaller than the target are left alone rather than upscaled.
 - **Format conversion** — WebP, JPEG, PNG, or AVIF output.
 - **Per-file size cap** — encodes at quality 80, then steps down by 10 to a floor of 20 until the file fits the cap; warns if the cap can't be met. Skipped for PNG (lossless output ignores quality).
 - **Consistent naming** — `[prefix]<original-name>[suffix].<ext>`, with `-1`, `-2`, … appended on collision instead of overwriting.
-- **Safe writes** — output goes to `<source-dir>/processed/` via temp file + rename, so a mid-run failure leaves no partial files.
+- **Safe writes** — output goes to a fresh `<source-dir>/processed/` (or `processed_2/`, `processed_3/`, … if a previous run's output is still there) via temp file + rename, so a mid-run failure leaves no partial files and a rerun never mingles with earlier output.
 - **Clear reporting** — per-file source → output, format, dimensions, size; plus totals for processed / skipped / errored and a list of failures with reasons.
 
 ## Requirements
@@ -47,6 +47,7 @@ pnpm start
 ? Suffix (optional) -web
 
 Folder:  ~/design/exports
+Output:  ~/design/exports/processed
 Format:  webp
 Resize:  fit width to 2000px
 Size cap: 500 KB
@@ -58,12 +59,15 @@ Suffix:  -web
 ╰─ spinner updates once per file while processing                 ╯
 
 Processed 24, skipped 1, errors 1
+Output: ~/design/exports/processed
   hero.png -> prod-hero-web.webp (webp, 2000x1500, 245 KB)
   ...
 Total output: 2.4 MB
 ```
 
-`image.png` becomes `~/design/exports/processed/prod-image-web.webp`. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
+The folder prompt is clack's path finder: it starts in the current directory and suggests matching paths as you type — navigate with the arrow keys, hit Tab to accept a suggestion. A leading `~` is resolved to your home directory when you submit (the finder itself doesn't expand it while typing).
+
+`image.png` becomes `~/design/exports/processed/prod-image-web.webp`. Each run writes to a fresh output folder — if `processed/` already holds files from an earlier run, squooshy picks the next free name (`processed_2/`, `processed_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
 
 ## Supported formats
 
@@ -111,4 +115,4 @@ Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and 
 
 This project follows the portfolio's Node + TypeScript house standard (`.agents/AGENTS-NODE.md`): Node 24, pnpm, ESM with on-disk `.ts` import extensions, functional core / imperative shell, and a `pnpm verify` quality gate.
 
-**Deliberate divergences from `.agents/AGENTS-NODE.md` (project wins; do not "fix" back):** `tsconfig.json` omits `noUnusedLocals` / `noUnusedParameters` / `noFallthroughCasesInSwitch` / `noImplicitOverride` / `isolatedModules` (type-aware ESLint covers the unused-vars gap); `tsconfig.build.json` omits `rootDir` / `declarationMap` (output lands flat in `dist/` because `include` is `src`); `.prettierrc` uses `printWidth: 100` instead of 88; the `build` script prepends a `rm -rf dist` clean step so stale output is never shipped.
+**Deliberate divergences from `.agents/AGENTS-NODE.md` (project wins; do not "fix" back):** `tsconfig.json` omits `noUnusedLocals` / `noUnusedParameters` / `noFallthroughCasesInSwitch` / `noImplicitOverride` / `isolatedModules` (type-aware ESLint covers the unused-vars gap); `tsconfig.build.json` omits `rootDir` / `declarationMap` (output lands flat in `dist/` because `include` is `src`); `.prettierrc` uses `printWidth: 100` instead of 88; the `build` script prepends a `rm -rf dist` clean step so stale output is never shipped; the PRD's fixed `processed/` output folder is replaced by a numbered fresh-per-run folder (`processed/`, `processed_2/`, …) so a rerun never overwrites or mingles with earlier output.
