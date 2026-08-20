@@ -70,12 +70,12 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 3.2 Implement `formatProgress` and run the tests until they pass.
 - [x] 4.0 Implement `src/resize.ts` — resize decision + dimension math (Track B)
   - [x] 4.1 Write failing tests in `src/resize.test.ts` for `shouldResize`: fit-by-width and fit-by-height both preserve aspect ratio, an already-smaller image reports "already fits" (no upscaling), and dimension math is correct for both axes. Run tests to confirm they fail.
-  - [ ] 4.2 Implement `shouldResize(width, height, maxDimension, axis)` and run the tests until they pass.
-- [ ] 5.0 Implement `src/quality.ts` — quality-cap loop (Track B)
-  - [ ] 5.1 Write failing tests in `src/quality.test.ts` for `findQualityUnderCap`: result encodes under the cap, quality decreases across attempts, and a floor-reached-but-still-over-cap case is flagged. Run tests to confirm they fail.
-  - [ ] 5.2 Implement `findQualityUnderCap(buffer, format, capBytes, { start = 80, step = 10, floor = 20 })` and run the tests until they pass.
-  - [ ] 5.3 Write failing tests for the PNG + cap rule: with a cap set and PNG output, the function warns and skips the quality loop, returning full-quality output. Run tests to confirm they fail.
-  - [ ] 5.4 Implement the PNG cap-skip behavior and run the tests until they pass.
+  - [x] 4.2 Implement `shouldResize(width, height, maxDimension, axis)` and run the tests until they pass.
+- [x] 5.0 Implement `src/quality.ts` — quality-cap loop (Track B)
+  - [x] 5.1 Write failing tests in `src/quality.test.ts` for `findQualityUnderCap`: result encodes under the cap, quality decreases across attempts, and a floor-reached-but-still-over-cap case is flagged. Run tests to confirm they fail.
+  - [x] 5.2 Implement `findQualityUnderCap(buffer, format, capBytes, { start = 80, step = 10, floor = 20 })` and run the tests until they pass.
+  - [x] 5.3 Write failing tests for the PNG + cap rule: with a cap set and PNG output, the function warns and skips the quality loop, returning full-quality output. Run tests to confirm they fail.
+  - [x] 5.4 Implement the PNG cap-skip behavior and run the tests until they pass.
 - [ ] 6.0 Implement `src/process.ts` — shell: resize, convert, and skip logic (Track B)
   - [ ] 6.1 Write failing tests in `src/process.test.ts` using real fixture images (fixtures over mocks — do not mock sharp): resize applies `shouldResize` results correctly, conversion to each output format (JPEG/WebP/AVIF/PNG) yields the right output mime/format and extension, and the cap loop writes the `findQualityUnderCap` result. Run tests to confirm they fail.
   - [ ] 6.2 Implement `processImage` with `sharp` (resize via the pure decision, convert, quality cap) and run the tests until they pass.
