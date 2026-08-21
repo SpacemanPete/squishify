@@ -25,6 +25,7 @@
 - `tests/fixtures/` — Sample source images (JPEG, PNG, WebP, TIFF, plus one GIF) for end-to-end tests.
 - `README.md` — Usage instructions and an example run.
 - `LICENSE` — MIT license text (2026, Piotr Butkiewicz).
+- `.github/workflows/ci.yml` — GitHub Actions CI: runs `pnpm verify` on PRs targeting main and pushes to main.
 
 ### Notes
 
@@ -162,6 +163,10 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [ ] 16.4 User: `npm login` (2FA required — npm is phasing out non-2FA publishing) and `npm whoami`; then `npm publish` (first publish claims the `squishify` name — there is no pre-registration).
   - [ ] 16.5 Verify the published artifact: `npm i -g squishify`, run `squishify` on a real image folder end-to-end.
   - [ ] 16.6 Final `pnpm verify` and commit in repo style.
+- [x] 17.0 GitHub Actions CI workflow
+  - [x] 17.1 Create `.github/workflows/ci.yml`: triggers on `pull_request` (targeting `main`) and `push` to `main`; ubuntu-latest; `pnpm/action-setup` (version from `packageManager`) before `actions/setup-node` (Node from `.nvmrc`, `cache: pnpm`); `pnpm install --frozen-lockfile`; `pnpm verify` (check + lint + format:check + test w/ coverage thresholds + build). Concurrency group cancels stale runs per ref.
+  - [x] 17.2 Local `pnpm verify` as the CI proxy (Actions can't run locally) and prettier check on the workflow file.
+  - [x] 17.3 Commit in repo style. Live verification happens on the first PR/push once the branch is on GitHub.
 
 ## Follow-up Issues (from code review)
 
