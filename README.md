@@ -1,59 +1,136 @@
-# squooshy
+# squishify
 
 An interactive CLI that batch-processes a folder of images for a design → product workflow. Answer a few prompts instead of remembering flags, and get back a clean, web-ready set of files in a `processed/` subfolder. Originals are never touched.
 
-> **Status:** specified, not yet implemented. See [tasks/prd-image-batch.md](tasks/prd-image-batch.md) and [tasks/tasks-image-batch.md](tasks/tasks-image-batch.md).
-
 ## Features
 
-- **Interactive prompts** — input folder, resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
-- **Resize to fit** — constrain max width *or* max height; aspect ratio is always preserved, and images already smaller than the target are left alone rather than upscaled.
+- **Interactive prompts** — a type-ahead folder finder (arrow keys to navigate, Tab to complete), resize, output format, size cap, prefix/suffix, then a confirmation summary before anything is written.
+- **Live progress** — a spinner updates once per file (`Processing 12/24 — hero.png (processed 9, skipped 1, errors 2)`) so you can monitor long batches; rendered to stderr so stdout carries only the final report.
+- **Resize to fit** — constrain max width _or_ max height; aspect ratio is always preserved, and images already smaller than the target are left alone rather than upscaled.
 - **Format conversion** — WebP, JPEG, PNG, or AVIF output.
 - **Per-file size cap** — encodes at quality 80, then steps down by 10 to a floor of 20 until the file fits the cap; warns if the cap can't be met. Skipped for PNG (lossless output ignores quality).
 - **Consistent naming** — `[prefix]<original-name>[suffix].<ext>`, with `-1`, `-2`, … appended on collision instead of overwriting.
-- **Safe writes** — output goes to `<source-dir>/processed/` via temp file + rename, so a mid-run failure leaves no partial files.
+- **Safe writes** — you pick the output folder's name (blank = `processed`); output goes to a fresh `<source-dir>/<name>/` (or `<name>_2/`, `<name>_3/`, … if a previous run's output is still there) via temp file + rename, so a mid-run failure leaves no partial files and a rerun never mingles with earlier output.
 - **Clear reporting** — per-file source → output, format, dimensions, size; plus totals for processed / skipped / errored and a list of failures with reasons.
 
 ## Requirements
 
-Node.js ≥ 18 (current LTS preferred).
+- Node.js 24 LTS.
+- pnpm (only for development from source; the installed CLI needs nothing else).
 
 ## Install
 
+Globally from npm:
+
 ```sh
-npm install
+npm i -g squishify
+```
+
+Or from source (requires pnpm):
+
+```sh
+pnpm install
 ```
 
 ## Usage
 
+Installed globally, run it anywhere:
+
 ```sh
-npm start
+squishify
 ```
+
+From a source checkout:
+
+```sh
+pnpm start
+```
+
+> `start` is an alias for `dev` (`node src/index.ts`); see Scripts.
+
+### CLI flags
+
+| Flag                  | Does                                 |
+| --------------------- | ------------------------------------ |
+| `squishify --help`    | Print usage and exit                 |
+| `squishify -h`        | Same as `--help`                     |
+| `squishify --version` | Print the installed version and exit |
+| `squishify -v`        | Same as `--version`                  |
+
+Exit codes: `0` on success (including an intentional cancel), `1` on an unexpected failure. Prompts and progress go to stderr; the final report is the only stdout output.
 
 ### Example run
 
 ```
-? Select a folder of images: ~/design/exports
-? Resize images to fit? yes
-  ? Fit by max width: 2000
-? Output format: WebP
-? Cap each file at a target size? yes
-  ? Max file size: 500 KB
-? Prefix (optional): prod-
-? Suffix (optional): -web
+? Which folder holds your images? ~/design/exports
+? Resize your images? yes
+  ? Fit by what? Width
+  ? Maximum pixels? 2000
+? Output format? WebP
+? Cap the output file size? yes
+  ? Maximum size? 500
+  ? In what unit? Kilobytes (KB)
+? Prefix (optional) prod-
+? Suffix (optional) -web
+? Output folder name? exports
 
-Summary:
-  Source: ~/design/exports
-  Output: ~/design/exports/processed
-  Resize: fit width ≤ 2000px
-  Format: webp
-  Cap: 500 KB
-  Naming: prod-<name>-web.webp
+Folder:  ~/design/exports
+Output:  ~/design/exports/exports
+Format:  webp
+Resize:  fit width to 2000px
+Size cap: 500 KB
+Prefix:  prod-
+Suffix:  -web
 
-Process 24 images? [y/N]
+? Start processing? y
+╭─ Processing 12/24 — hero.png (processed 9, skipped 1, errors 2) ╮
+╰─ spinner updates once per file while processing                 ╯
+
+Processed 24, skipped 1, errors 1
+Output: ~/design/exports/exports
+  hero.png -> prod-hero-web.webp (webp, 2000x1500, 245 KB)
+  ...
+Total output: 2.4 MB
 ```
 
-`image.png` becomes `~/design/exports/processed/prod-image-web.webp`.
+The folder prompt is clack's path finder: it starts in the current directory and suggests matching paths as you type — navigate with the arrow keys, hit Tab to accept a suggestion. A leading `~` is resolved to your home directory when you submit (the finder itself doesn't expand it while typing).
+
+`image.png` becomes `~/design/exports/exports/prod-image-web.webp`. Each run writes to a fresh output folder — if `<name>/` already holds files from an earlier run, squishify picks the next free name (`<name>_2/`, `<name>_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
+
+## Programmatic API
+
+The same pipeline is available as a library — importing the module never starts the CLI (the interactive entry only runs when executed directly):
+
+```ts
+import { squishify, SquishifyConfigError } from "squishify";
+
+const result = await squishify({
+  dir: "/design/exports",
+  format: "webp",
+  resize: { axis: "width", maxDimension: 2000 },
+  capBytes: 500 * 1024,
+  prefix: "prod-",
+  suffix: "-web",
+  outputName: "exports",
+  onProgress: (info) => console.error(`${info.index}/${info.total} — ${info.name}`),
+  signal: controller.signal,
+});
+```
+
+| Option              | Type                                                          | Default       | Notes                                                                                    |
+| ------------------- | ------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `dir`               | string                                                        | required      | Source folder; must exist, be readable, and contain at least one supported image         |
+| `format`            | `"jpeg" \| "webp" \| "avif" \| "png"`                         | required      | Output format (read-only formats like gif/tiff are rejected)                             |
+| `resize`            | `{ axis: "width" \| "height", maxDimension: number } \| null` | `null`        | Fit within the max dimension; aspect ratio preserved; no upscaling                       |
+| `capBytes`          | number \| null                                                | `null`        | Per-file size cap via the quality-reduction loop                                         |
+| `prefix` / `suffix` | string                                                        | `""`          | Output naming; path separators and `..` rejected                                         |
+| `outputName`        | string                                                        | `"processed"` | Output folder base name; a fresh numbered folder (`name`, `name_2`, …) is picked per run |
+| `onProgress`        | `(info) => void`                                              | —             | Called once per file with `{ index, total, name, counts }`                               |
+| `signal`            | AbortSignal                                                   | —             | Aborts between files; the result carries `status: "cancelled"`                           |
+
+Malformed options throw a single `SquishifyConfigError` that lists **all** problems — nothing is written to disk. An already-aborted signal returns a cancelled result without creating the output folder. The resolved `BatchResult` mirrors the CLI report: `status`, `processed`, `skipped`, `errors`, `totalOutputBytes`, and `outputDir`.
+
+Note: `~` is expanded only by the interactive prompt — pass an absolute path in `dir`.
 
 ## Supported formats
 
@@ -68,21 +145,37 @@ No GUI, watch mode, cloud/CMS upload, pure-rename mode, ICC/color-profile handli
 
 ## Scripts
 
-| Script | Does |
-|---|---|
-| `npm start` | Run the interactive CLI (`tsx src/index.ts`) |
-| `npm run build` | Compile TypeScript (`tsc`) |
-| `npm test` | Run the test suite (Vitest) |
-| `npm run lint` | Lint (ESLint) |
+| Script              | Does                                                       |
+| ------------------- | ---------------------------------------------------------- |
+| `pnpm dev`          | Run the interactive CLI directly (`node src/index.ts`)     |
+| `pnpm start`        | Alias for `dev`                                            |
+| `pnpm check`        | Typecheck (`tsc -p tsconfig.json`)                         |
+| `pnpm build`        | Emit to `dist/` (`tsc -p tsconfig.build.json`)             |
+| `pnpm test`         | Run the test suite with coverage (Vitest)                  |
+| `pnpm lint`         | Lint (ESLint, type-aware, `--max-warnings 0`)              |
+| `pnpm format`       | Format with Prettier                                       |
+| `pnpm format:check` | Verify formatting                                          |
+| `pnpm verify`       | Aggregate gate: check + lint + format:check + test + build |
 
 ## Project layout
 
 ```
-src/index.ts     prompt flow + orchestration
-src/process.ts   resize, convert, quality-cap loop
-src/naming.ts    output filename + collision resolution
-src/*.test.ts    unit tests (colocated)
-tests/fixtures/  sample images for the end-to-end test
+src/index.ts       prompt flow + orchestration + progress spinner (shell)
+src/process.ts     resize, convert, quality-cap loop, temp-file writes (shell)
+src/naming.ts      output filename + collision resolution (pure)
+src/resize.ts      resize decision + dimension math (pure)
+src/quality.ts     quality-cap loop (pure)
+src/progress.ts    progress message formatter (pure)
+src/*.test.ts      unit tests (colocated)
+src/pipeline.test.ts  end-to-end smoke test
+tests/fixtures/    sample images for the end-to-end test
+dist/              build output (gitignored)
 ```
 
-Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and [@clack/prompts](https://github.com/bombshell-dev/clack) for the prompt flow.
+Pure core modules (`naming.ts`, `resize.ts`, `quality.ts`, `progress.ts`) are the coverage-measured surface; `process.ts` and `index.ts` are thin shells over them.
+
+Built on [sharp](https://sharp.pixelplumbing.com/) (libvips) for processing and [@clack/prompts](https://github.com/bombshell-dev/clack) for the prompt flow and progress spinner.
+
+This project follows the portfolio's Node + TypeScript house standard (`.agents/AGENTS-NODE.md`): Node 24, pnpm, ESM with on-disk `.ts` import extensions, functional core / imperative shell, and a `pnpm verify` quality gate.
+
+**Deliberate divergences from `.agents/AGENTS-NODE.md` (project wins; do not "fix" back):** `tsconfig.json` omits `noUnusedLocals` / `noUnusedParameters` / `noFallthroughCasesInSwitch` / `noImplicitOverride` / `isolatedModules` (type-aware ESLint covers the unused-vars gap); `tsconfig.build.json` omits `rootDir` / `declarationMap` (output lands flat in `dist/` because `include` is `src`); `.prettierrc` uses `printWidth: 100` instead of 88; the `build` script prepends a `rm -rf dist` clean step so stale output is never shipped; the PRD's fixed `processed/` output folder is replaced by a numbered fresh-per-run folder (`processed/`, `processed_2/`, …) so a rerun never overwrites or mingles with earlier output.

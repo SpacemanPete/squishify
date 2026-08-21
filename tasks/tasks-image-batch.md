@@ -2,24 +2,40 @@
 
 ## Relevant Files
 
-- `package.json` — Project metadata, dependencies (`sharp`, `@clack/prompts`), and scripts (`start`, `build`, `test`, `lint`).
-- `tsconfig.json` — TypeScript compiler configuration.
-- `vitest.config.ts` — Test runner configuration.
-- `eslint.config.js` — Linter configuration.
-- `src/naming.ts` — Output filename builder and collision resolution.
+- `package.json` — Project metadata (`"type": "module"`, `engines.node` `">=24"`, `packageManager` pnpm), dependencies (`sharp`, `@clack/prompts`), scripts (`dev`, `start`, `check`, `build`, `test`, `lint`, `format`, `format:check`, `verify`).
+- `.nvmrc` — Pins Node 24.
+- `tsconfig.json` — Typecheck config: `src/` + tests + `*.config.ts`, es2023, `nodenext`, `rewriteRelativeImportExtensions`, `strict` + `noUncheckedIndexedAccess`, `noEmit`.
+- `tsconfig.build.json` — Emit config: `src/` → `dist/`, declarations + sourcemaps, `*.test.ts` excluded.
+- `vitest.config.ts` — Test runner config. `include: ["src/**/*.test.ts"]`; coverage allowlist (`src/naming.ts`, `src/resize.ts`, `src/quality.ts`, `src/progress.ts`) with thresholds lines/functions 90, branches 85. **Add every new pure core module here.**
+- `eslint.config.js` — Flat, type-aware (`recommendedTypeChecked`, `no-floating-promises`, `consistent-type-imports`), `allowDefaultProject` lists only `eslint.config.js`.
+- `.prettierrc` / `.prettierignore` — Formatting config (`dist/`, `coverage/`, `node_modules/`, `pnpm-lock.yaml` ignored).
+- `src/naming.ts` — Output filename builder and collision resolution (pure core).
 - `src/naming.test.ts` — Unit tests for `naming.ts` (written first, per TDD).
-- `src/process.ts` — Per-image processing: resize, convert, quality-cap loop, skip logic.
-- `src/process.test.ts` — Unit tests for `process.ts` (written first, per TDD).
-- `src/index.ts` — Interactive prompt flow + orchestration of the full run.
+- `src/resize.ts` — Resize decision + dimension math (pure core).
+- `src/resize.test.ts` — Unit tests for `resize.ts` (written first, per TDD).
+- `src/quality.ts` — Quality-cap loop incl. PNG cap-skip rule (pure core).
+- `src/quality.test.ts` — Unit tests for `quality.ts` (written first, per TDD).
+- `src/progress.ts` — Progress message formatter (pure core).
+- `src/progress.test.ts` — Unit tests for `progress.ts` (written first, per TDD).
+- `src/process.ts` — Shell: per-image processing (resize, convert, cap loop, skip logic, temp-file writes) via sharp + `node:fs`.
+- `src/process.test.ts` — Tests for `process.ts` using real fixtures (fixtures over mocks; written first, per TDD).
+- `src/index.ts` — Interactive prompt flow + orchestration of the full run, including driving the progress spinner (shell).
 - `src/index.test.ts` — Tests for prompt flow (mocked prompts) and orchestration (written first, per TDD).
+- `src/pipeline.test.ts` — End-to-end smoke test over `tests/fixtures/` (copies fixtures to a temp dir; asserts outputs, byte-identical sources, 500 KB cap honored or reported unmeetable).
 - `tests/fixtures/` — Sample source images (JPEG, PNG, WebP, TIFF, plus one GIF) for end-to-end tests.
 - `README.md` — Usage instructions and an example run.
+- `LICENSE` — MIT license text (2026, Piotr Butkiewicz).
+- `.github/workflows/ci.yml` — GitHub Actions CI: runs `pnpm verify` on PRs targeting main and pushes to main.
 
 ### Notes
 
 - **TDD pattern:** For every feature, write the failing test(s) first, confirm they fail for the right reason, then implement the minimal code to make them pass. Tests must exist alongside the code they verify.
 - Unit tests should be placed alongside the code files they are testing (e.g., `naming.ts` and `naming.test.ts` in the same directory).
-- Use `npx vitest` to run tests. Running without a path executes all tests found by the Vitest configuration.
+- Use `pnpm test` (or `pnpm vitest run`) to run tests. Running without a path executes all tests found by the Vitest configuration.
+- **Coverage allowlist:** every new pure core module must be added to `coverage.include` in `vitest.config.ts` — an unlisted module is silently at 0% and the suite still passes.
+- **Core and shell do not share a module.** Pure functions live in `naming.ts` / `resize.ts` / `quality.ts` / `progress.ts` only; `process.ts` and `index.ts` are shells.
+- **Progress rendering is shell code.** The spinner lives in `index.ts`; `progress.ts` only formats the message string. Progress goes to stderr (clack renders there natively) — stdout carries only the final report.
+- Run `pnpm verify` before reporting a task done.
 
 ## Instructions for Completing Tasks
 
@@ -33,52 +49,129 @@ Update the file after completing each sub-task, not just after completing an ent
 
 ## Parallel Work Tracks
 
-After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)** and **Track B (Tasks 3.0–4.0, processing)** are fully independent and can be developed in parallel — they touch no shared files. Task 5.0 (orchestration) depends on both Track A and Track B and should start only after they land. Task 6.0's fixture files can be created in parallel with Tracks A/B, but its end-to-end assertions require Tasks 2.0–5.0 to be complete.
+After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Track B (Tasks 4.0–5.0, resize + quality)**, and **Track C (Task 3.0, progress formatting)** are fully independent and can be developed in parallel — they touch no shared files. Task 6.0 (processing shell) depends on Track B, and Task 8.0 (orchestration, incl. spinner wiring) depends on all tracks. Task 9.0's fixture files can be created in parallel with Tracks A–C, but its end-to-end assertions require Tasks 2.0–8.0 to be complete.
 
 ## Tasks
 
-- [ ] 0.0 Create feature branch
-  - [ ] 0.1 Create and checkout a new branch for this feature (`git checkout -b feature/image-batch`)
-- [ ] 1.0 Scaffold project (package.json, deps, folder layout, config, README)
-  - [ ] 1.1 Initialize the npm project and create `package.json` with name, version, and scripts: `start` (`tsx src/index.ts`), `build` (`tsc`), `test` (`vitest run`), `lint` (`eslint`).
-  - [ ] 1.2 Install runtime dependencies `sharp` and `@clack/prompts`, plus dev dependencies `typescript`, `tsx`, `vitest`, and `eslint` + TypeScript ESLint plugins.
-  - [ ] 1.3 Create `tsconfig.json` (target ES2022, strict mode) and the folder layout: `src/` for source modules and `tests/` for end-to-end fixtures.
-  - [ ] 1.4 Create `vitest.config.ts` and `eslint.config.js` so `npm test` and `npm run lint` run from the project root.
-  - [ ] 1.5 Write `README.md` with setup, usage, and a short example run.
-  - [ ] 1.6 Create a trivial placeholder module + placeholder test and verify `npm test` and `npm run lint` both pass, confirming the harness works.
-- [ ] 2.0 Implement `src/naming.ts` — filename builder + collision resolution (Track A)
-  - [ ] 2.1 Write failing tests in `src/naming.test.ts` for `buildOutputName`: prefix-only, suffix-only, both, neither, and extension swap (e.g., `image.png` + `prod-` + `-web` + `.webp` → `prod-image-web.webp`). Run tests to confirm they fail.
-  - [ ] 2.2 Implement `buildOutputName(originalName, { prefix, suffix, ext })` and run the tests until they pass.
-  - [ ] 2.3 Write failing tests in `src/naming.test.ts` for `resolveCollision`: no collision returns name unchanged, one collision appends `-1`, multiple collisions append `-2`, `-3`, … Run tests to confirm they fail.
-  - [ ] 2.4 Implement `resolveCollision(name, existingNames)` and run the tests until they pass.
-- [ ] 3.0 Implement `src/process.ts` — quality-cap loop (Track B)
-  - [ ] 3.1 Write failing tests in `src/process.test.ts` for `findQualityUnderCap`: result encodes under the cap, quality decreases across attempts, and a floor-reached-but-still-over-cap case is flagged. Run tests to confirm they fail.
-  - [ ] 3.2 Implement `findQualityUnderCap(buffer, format, capBytes, { start = 80, step = 10, floor = 20 })` and run the tests until they pass.
-  - [ ] 3.3 Write failing tests for the PNG + cap rule: with a cap set and PNG output, the function warns and skips the quality loop, returning full-quality output. Run tests to confirm they fail.
-  - [ ] 3.4 Implement the PNG cap-skip behavior and run the tests until they pass.
-- [ ] 4.0 Implement `src/process.ts` — image resize, convert, and skip logic (Track B)
-  - [ ] 4.1 Write failing tests in `src/process.test.ts` for resize behavior: fit-by-width and fit-by-height both preserve aspect ratio, and an already-smaller image is not upscaled. Run tests to confirm they fail.
-  - [ ] 4.2 Implement `processImage` resize handling with `sharp` and run the tests until they pass.
-  - [ ] 4.3 Write failing tests for format conversion (JPEG/WebP/AVIF/PNG) verifying the output mime/format and correct extension. Run tests to confirm they fail.
-  - [ ] 4.4 Implement the conversion step in `processImage` and run the tests until they pass.
-  - [ ] 4.5 Write failing tests for skip logic: GIF files are skipped with reason `unsupported format: gif`, and unsupported/corrupt files are skipped with a logged reason without throwing. Run tests to confirm they fail.
-  - [ ] 4.6 Implement the skip logic and run the tests until they pass.
-- [ ] 5.0 Implement `src/index.ts` — interactive prompt flow (TDD, mocked prompts)
-  - [ ] 5.1 Write failing tests in `src/index.test.ts` for input-directory validation: accepts a valid folder, rejects a missing path / non-directory / image-less folder, and loops back with a friendly re-enter message. Run tests to confirm they fail.
-  - [ ] 5.2 Implement the input-directory validation using `@clack/prompts` and run the tests until they pass.
-  - [ ] 5.3 Write failing tests for the prompt sequence: resize (yes/no → fit width/height → pixel value), output-format menu, size-cap (yes/no → value + KB/MB), and optional prefix/suffix, all producing a correctly typed config object. Run tests to confirm they fail.
-  - [ ] 5.4 Implement the prompt sequence and run the tests until they pass.
-  - [ ] 5.5 Write failing tests for the final confirmation summary (all answers displayed, `y/N` to confirm) and Ctrl-C/cancel handling that exits cleanly with no partial writes. Run tests to confirm they fail.
-  - [ ] 5.6 Implement the confirmation summary and cancel handling and run the tests until they pass.
-- [ ] 6.0 Wire orchestration: walk folder → process each → write to `processed/` → report (TDD)
-  - [ ] 6.1 Write failing tests for folder walking: lists top-level files only, filters to supported formats, and sorts deterministically. Run tests to confirm they fail.
-  - [ ] 6.2 Implement the folder walk and run the tests until they pass.
-  - [ ] 6.3 Write failing tests for the output pipeline: creates `<source-dir>/processed/` if missing, resolves collisions via the naming module, writes to a temp file then renames into place, and never modifies source files. Run tests to confirm they fail.
-  - [ ] 6.4 Implement the output pipeline and run the tests until they pass.
-  - [ ] 6.5 Write failing tests for reporting: per-file summary (source → output, format, dimensions, size), grand total (processed/skipped/errors/total size), and the failed-files list with reasons. Run tests to confirm they fail.
-  - [ ] 6.6 Implement the reporting output and run the tests until they pass.
-- [ ] 7.0 Add fixtures + end-to-end smoke test; run lint and test suite
-  - [ ] 7.1 Create small fixture images in `tests/fixtures/` (JPEG, PNG, WebP, TIFF, plus one GIF to exercise the skip path).
-  - [ ] 7.2 Write an end-to-end test that runs the full pipeline on the fixtures and asserts the expected number of outputs, correct filenames, and that `processed/` contains only expected files.
-  - [ ] 7.3 Add an end-to-end assertion that source fixtures are byte-identical after a run (hash compare) and that a 500 KB cap is honored or explicitly reported as unmeetable.
-  - [ ] 7.4 Run `npm run lint && npm test`, fix any failures, and do a manual smoke run on a real image folder to confirm the full prompt flow works end-to-end.
+### Phase 1
+
+- [x] 0.0 Create feature branch
+  - [x] 0.1 Create and checkout a new branch for this feature (`git checkout -b feature/image-batch`)
+- [x] 1.0 Scaffold project (package.json, deps, folder layout, config, README)
+  - [x] 1.1 Initialize the project with pnpm: `package.json` with `"type": "module"`, `"engines": { "node": ">=24" }`, `packageManager` (pnpm), and scripts: `dev` (`node src/index.ts`), `start` (`node src/index.ts`), `check` (`tsc -p tsconfig.json`), `build` (`tsc -p tsconfig.build.json`), `test` (`vitest run --coverage`), `lint` (`eslint . --max-warnings 0`), `format` (`prettier --write .`), `format:check` (`prettier --check .`), `verify` (`pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build`). Create `.nvmrc` with `24`.
+  - [x] 1.2 Install runtime dependencies `sharp` and `@clack/prompts`, plus dev dependencies `typescript@^5.9`, `@types/node`, `vitest`, `@vitest/coverage-v8`, `eslint`, `typescript-eslint`, `@eslint/js`, and `prettier`. No `tsx` — Node 24 strips types natively. Commit `pnpm-lock.yaml`.
+  - [x] 1.3 Create `tsconfig.json` (es2023, `nodenext`, `rewriteRelativeImportExtensions`, `verbatimModuleSyntax`, strict + `noUncheckedIndexedAccess`, `noEmit`; include `src` + `*.config.ts`) and `tsconfig.build.json` (extends it, emits to `dist/` with declarations + sourcemaps, excludes `src/**/*.test.ts`). Create the folder layout: `src/` for source modules and `tests/` for end-to-end fixtures.
+  - [x] 1.4 Create `vitest.config.ts` (include `src/**/*.test.ts`; coverage allowlist `src/naming.ts`, `src/resize.ts`, `src/quality.ts`, `src/progress.ts`; thresholds lines/functions 90, branches 85) and `eslint.config.js` (flat, type-aware, `allowDefaultProject` lists only `eslint.config.js`) so `pnpm test` and `pnpm lint` run from the project root. Add `.prettierrc` and `.prettierignore` (`dist/`, `coverage/`, `node_modules/`, `pnpm-lock.yaml`).
+  - [x] 1.5 Write `README.md` with setup, usage, and a short example run.
+  - [x] 1.6 Create a trivial placeholder module + placeholder test and verify `pnpm verify` passes, confirming the harness works.
+- [x] 2.0 Implement `src/naming.ts` — filename builder + collision resolution (Track A)
+  - [x] 2.1 Write failing tests in `src/naming.test.ts` for `buildOutputName`: prefix-only, suffix-only, both, neither, and extension swap (e.g., `image.png` + `prod-` + `-web` + `.webp` → `prod-image-web.webp`). Run tests to confirm they fail.
+  - [x] 2.2 Implement `buildOutputName(originalName, { prefix, suffix, ext })` and run the tests until they pass.
+  - [x] 2.3 Write failing tests in `src/naming.test.ts` for `resolveCollision`: no collision returns name unchanged, one collision appends `-1`, multiple collisions append `-2`, `-3`, … Run tests to confirm they fail.
+  - [x] 2.4 Implement `resolveCollision(name, existingNames)` — takes the existing names as an argument rather than reading the directory — and run the tests until they pass.
+- [x] 3.0 Implement `src/progress.ts` — progress message formatter (Track C)
+  - [x] 3.1 Write failing tests in `src/progress.test.ts` for `formatProgress(index, total, currentName, { processed, skipped, errors })`: first file renders `Processing 1/24 — hero.png (processed 1, skipped 0, errors 0)`, mid-run position and running counts render correctly, and singular/plural wording is handled (e.g. `1 error` vs `2 errors`). Run tests to confirm they fail.
+  - [x] 3.2 Implement `formatProgress` and run the tests until they pass.
+- [x] 4.0 Implement `src/resize.ts` — resize decision + dimension math (Track B)
+  - [x] 4.1 Write failing tests in `src/resize.test.ts` for `shouldResize`: fit-by-width and fit-by-height both preserve aspect ratio, an already-smaller image reports "already fits" (no upscaling), and dimension math is correct for both axes. Run tests to confirm they fail.
+  - [x] 4.2 Implement `shouldResize(width, height, maxDimension, axis)` and run the tests until they pass.
+- [x] 5.0 Implement `src/quality.ts` — quality-cap loop (Track B)
+  - [x] 5.1 Write failing tests in `src/quality.test.ts` for `findQualityUnderCap`: result encodes under the cap, quality decreases across attempts, and a floor-reached-but-still-over-cap case is flagged. Run tests to confirm they fail.
+  - [x] 5.2 Implement `findQualityUnderCap(buffer, format, capBytes, { start = 80, step = 10, floor = 20 })` and run the tests until they pass.
+  - [x] 5.3 Write failing tests for the PNG + cap rule: with a cap set and PNG output, the function warns and skips the quality loop, returning full-quality output. Run tests to confirm they fail.
+  - [x] 5.4 Implement the PNG cap-skip behavior and run the tests until they pass.
+  - [x] 5.5 Review fixes: `QualityResult` gains an optional `warning` field (replaces `console.warn` in the core module — the shell surfaces warnings), the cap loop always runs at least once (`start` below `floor` clamps to `floor`, `step` clamped to ≥ 1), and the reported quality always matches the attempted encode when the step misses the floor. Tests updated + extended; `pnpm verify` passes.
+- [x] 6.0 Implement `src/process.ts` — shell: resize, convert, and skip logic (Track B)
+  - [x] 6.1 Write failing tests in `src/process.test.ts` using real fixture images (fixtures over mocks — do not mock sharp): resize applies `shouldResize` results correctly, conversion to each output format (JPEG/WebP/AVIF/PNG) yields the right output mime/format and extension, and the cap loop writes the `findQualityUnderCap` result. Run tests to confirm they fail.
+  - [x] 6.2 Implement `processImage` with `sharp` (resize via the pure decision, convert, quality cap) and run the tests until they pass.
+  - [x] 6.3 Write failing tests for skip logic: GIF files are skipped with reason `unsupported format: gif`, and unsupported/corrupt files are skipped with a logged reason without throwing. Run tests to confirm they fail.
+  - [x] 6.4 Implement the skip logic and run the tests until they pass.
+- [x] 7.0 Implement `src/index.ts` — interactive prompt flow (TDD, mocked prompts)
+  - [x] 7.1 Write failing tests in `src/index.test.ts` for input-directory validation: accepts a valid folder, rejects a missing path / non-directory / image-less folder, and loops back with a friendly re-enter message. Run tests to confirm they fail.
+  - [x] 7.2 Implement the input-directory validation using `@clack/prompts` and run the tests until they pass.
+  - [x] 7.3 Write failing tests for the prompt sequence: resize (yes/no → fit width/height → pixel value), output-format menu, size-cap (yes/no → value + KB/MB), and optional prefix/suffix, all producing a correctly typed config object. Run tests to confirm they fail.
+  - [x] 7.4 Implement the prompt sequence and run the tests until they pass.
+  - [x] 7.5 Write failing tests for the final confirmation summary (all answers displayed, `y/N` to confirm) and Ctrl-C/cancel handling that exits cleanly with no partial writes. Run tests to confirm they fail.
+  - [x] 7.6 Implement the confirmation summary and cancel handling and run the tests until they pass.
+- [x] 8.0 Wire orchestration: walk folder → process each → drive progress spinner → write to `processed/` → report (TDD)
+  - [x] 8.1 Write failing tests for folder walking: lists top-level files only, filters to supported formats, and sorts deterministically. Run tests to confirm they fail.
+  - [x] 8.2 Implement the folder walk and run the tests until they pass.
+  - [x] 8.3 Write failing tests for the output pipeline: creates `<source-dir>/processed/` if missing, resolves collisions via the naming module, writes to a temp file then renames into place, processes with bounded concurrency (sequential or a small pool — never `Promise.all` over the whole folder), and never modifies source files. Run tests to confirm they fail.
+  - [x] 8.4 Implement the output pipeline and run the tests until they pass.
+  - [x] 8.5 Write failing tests for the progress spinner wiring with a mocked spinner: the spinner message updates once per file using `formatProgress` with correct position and running counts, the spinner stops before the final report prints, and a cancelled run stops the spinner with no partial writes. Run tests to confirm they fail.
+  - [x] 8.6 Implement the spinner wiring and run the tests until they pass.
+  - [x] 8.7 Write failing tests for reporting: per-file summary (source → output, format, dimensions, size), grand total (processed/skipped/errors/total size), and the failed-files list with reasons. Run tests to confirm they fail.
+  - [x] 8.8 Implement the reporting output and run the tests until they pass.
+- [x] 9.0 Add fixtures + end-to-end smoke test; run the full gate
+  - [x] 9.1 Create small fixture images in `tests/fixtures/` (JPEG, PNG, WebP, TIFF, plus one GIF to exercise the skip path).
+  - [x] 9.2 Write `src/pipeline.test.ts`, an end-to-end test that runs the full pipeline on the fixtures and asserts the expected number of outputs, correct filenames, and that `processed/` contains only expected files.
+  - [x] 9.3 Add an end-to-end assertion that source fixtures are byte-identical after a run (hash compare) and that a 500 KB cap is honored or explicitly reported as unmeetable.
+  - [x] 9.4 Run `pnpm verify` (check, lint, format:check, test with coverage thresholds, build), confirm `dist/` contains no `*.test.js`, and do a manual smoke run on a real image folder plus `node dist/index.js` from the built output — including confirming the live progress spinner updates during processing and that stdout contains only the final report.
+- [x] 10.0 Bug remediation: fixes from the post-implementation review (2026-08-20)
+  - [x] 10.1 Write failing tests in `src/process.test.ts` for resize + cap combined: with both `resize` and `capBytes` set, the output must be resized to ≤ the max dimension AND under the cap (today `processImage` drops the resize when a cap is set — `findQualityUnderCap` gets the original buffer, `src/process.ts:57`). Run tests to confirm they fail.
+  - [x] 10.2 Fix `processImage` (`src/process.ts`): materialize the resized buffer first (apply `pipeline.resize(...)`, then `toBuffer()`), pass that buffer to `findQualityUnderCap` so resize and cap compose. Run tests until they pass.
+  - [x] 10.3 Write failing tests in `src/process.test.ts` for the temp-write path: spy on `fs/promises` `writeFile`/`rename` to assert the temp file is created in the same directory as the output (not `os.tmpdir()` — cross-device `rename` fails with EXDEV on tmpfs `/tmp`), and that a failed write cleans up the temp file (no orphan `squishify-write-*` entries). Run tests to confirm they fail.
+  - [x] 10.4 Fix `writeTempAndRename` (`src/process.ts`): write a `.tmp` file next to the output target and `rename` within that directory; remove the temp in a `finally` on failure. Run tests until they pass.
+  - [x] 10.5 Write failing tests in `src/index.test.ts` for rerun collision safety: `runBatch` over a folder whose `processed/` already contains an output name appends `-1` instead of overwriting (`usedNames` starts empty, `src/index.ts:293`). Run tests to confirm they fail.
+  - [x] 10.6 Fix `runBatch` (`src/index.ts`): seed `usedNames` with the existing `processed/` directory listing before the loop (per the PRD's "shell gathers the directory listing and passes it in" design). Run tests until they pass.
+  - [x] 10.7 Update `src/index.test.ts` and `src/pipeline.test.ts` for GIF surfacing: a `.gif` in the source folder appears in the report as skipped with reason `unsupported format: gif` (today `listImages` filters `.gif` before the skip path can log it). Note: gif-only folders now validate as image folders and produce an all-skipped run. Run tests to confirm the new expectations fail.
+  - [x] 10.8 Add `gif` to `SUPPORTED_EXTENSIONS` (`src/index.ts:25`) so GIFs reach `processImage` and are reported as skipped with the reason. Run tests until they pass.
+  - [x] 10.9 Write failing tests in `src/index.test.ts` for prefix/suffix validation: path separators (`/`, `\`) and `..` in prefix or suffix are rejected at the prompt (today `../` writes outside `processed/`). Run tests to confirm they fail.
+  - [x] 10.10 Add a `validate` to the prefix/suffix prompts (`src/index.ts` `promptText`) rejecting path separators. Run tests until they pass.
+  - [x] 10.11 Refactor error narrowing: replace `(error as Error).message` casts in `src/process.ts` (`readInput`) and `src/index.ts` (`runBatch` catch) with `error instanceof Error ? error.message : String(error)`; existing tests cover regression.
+  - [x] 10.12 Fix double cancel messaging: `cancel("Cancelled.")` plus `outro("Cancelled.")` prints the cancellation twice — consolidate to one message in `main`; update the cancel tests accordingly.
+  - [x] 10.13 Housekeeping: add a clean step to the `build` script so stale `dist/placeholder.*` from Task 1.6 is removed on build; move the stray top-level `it` in `src/index.test.ts` into a `describe`; dedupe `ProgressCounts` by importing it from `src/progress.ts`.
+  - [x] 10.14 Refresh `README.md`: replace the "specified, not yet implemented" banner, align the example run with the real prompt strings, and document the intentional config divergences from `.agents/AGENTS-NODE.md` (tsconfig strictness flags, `rootDir`/`declarationMap`, `.prettierrc` `printWidth: 100`) per the project-wins rule.
+  - [x] 10.15 Run `pnpm verify` (check, lint, format:check, test with coverage thresholds, build), confirm `dist/` contains no `*.test.js` and no `placeholder.*`, and smoke-run `node src/index.ts` plus `node dist/index.js`.
+- [x] 11.0 Fresh output directory per run (numbered `processed/…`)
+  - [x] 11.1 Write failing tests in `src/index.test.ts` for `pickOutputDir` (exported from `src/index.ts`): a fresh folder resolves to `processed/`; a non-empty `processed/` resolves to `processed_2/`; an empty `processed/` is reused; a file named `processed` is avoided; `processed_2` occupied continues to `processed_3`. Also update `runBatch` call sites to the new `(dir, outDir, config, hooks)` signature and assert `result.outputDir`. Run tests to confirm they fail.
+  - [x] 11.2 Write failing tests in `src/index.test.ts` for the summary + report: `summaryText`/`confirmSummary` take the resolved output dir and render an `Output:` line; `renderReport` shows the output path; a `main()` run over a folder with an existing `processed/` prints `processed_2` in the report. Run tests to confirm they fail.
+  - [x] 11.3 Implement `pickOutputDir` (first non-existing or empty `processed[_n]`), resolve the output dir once in `main()` before confirmation, thread it through `confirmSummary` → `runWithSpinner` → `runBatch`, add `outputDir` to `BatchResult` + report, and revert the `usedNames` pre-seeding (the chosen dir is always empty). Run tests until they pass.
+  - [x] 11.4 Update `README.md`: output-folder wording ("fresh `processed/`, `processed_2/`, … per run"), example summary + report showing `Output:`, and extend the deliberate-divergences note (PRD req 13 fixed `processed/` name no longer applies).
+  - [x] 11.5 Run `pnpm verify` and smoke-run `node src/index.ts`.
+- [x] 12.0 Path finder for the folder prompt (clack `path` prompt) + `~` support
+  - [x] 12.1 Write failing tests in `src/index.test.ts`: add `path` to the mocked `@clack/prompts` factory; `promptInputDirectory` uses the `path` prompt with `directory: true` and `root: process.cwd()`; re-point its existing tests (valid folder, missing path loop, non-directory, image-less, cancel); table tests for exported `expandHome` (`~` → home, `~/x` → `home/x`, `~foo` untouched, absolute untouched). Run tests to confirm they fail.
+  - [x] 12.2 Implement `promptInputDirectory` via `path({ message, directory: true, root: process.cwd() })` with `expandHome` applied to the submitted value before validation (fixes `~/…` always failing today); `main()` tests switch their first mock from `text` to `path`. Run tests until they pass.
+  - [x] 12.3 Update `README.md`: document the type-ahead finder (arrow keys, Tab to complete), root = cwd, and that `~` resolves on submit (the clack prompt itself does not expand it while typing).
+  - [x] 12.4 Run `pnpm verify`, smoke-run `node src/index.ts` and built `node dist/index.js`, and commit `Task 11.0` + `Task 12.0` in repo style.
+- [x] 13.0 Prompt for a custom output folder name (default `processed`)
+  - [x] 13.1 Write failing tests in `src/index.test.ts`: `promptOutputName` (blank → `processed`, trimmed custom name returned, path separators rejected inline with re-prompt, cancel); `pickOutputDir(dir, baseName)` custom-base cases (fresh → `web/`, occupied → `web_2/`, file named `web` avoided); a `main()` run with a custom name reporting the chosen dir; insert the extra `""` mock into the three existing main-flow sequences. Run tests to confirm they fail.
+  - [x] 13.2 Implement `promptOutputName` (text prompt with separator validation, blank → `processed`) and generalize `pickOutputDir` to a `baseName` parameter (default `"processed"`); wire the prompt into `main()` before resolution/confirmation. Run tests until they pass.
+  - [x] 13.3 Update `README.md`: example run gains the output-folder prompt; note the blank → `processed` default and the numbered-fresh-folder behavior for custom names.
+  - [x] 13.4 Run `pnpm verify`, smoke-run `node src/index.ts`, and commit in repo style.
+
+### Phase 2
+
+- [x] 14.0 Rename project to **squishify** + make the package publishable
+  - [x] 14.1 Rename the GitHub repo via `gh repo rename squishify --yes` (updates local `origin` to `git@github.com:SpacemanPete/squishify.git`; old URL redirects). Local folder `/home/void/dev/projects/squooshy` stays as-is — disk name doesn't affect git.
+  - [x] 14.2 Update `package.json`: `"name": "squishify"`, `"version": "1.0.0"`, remove `"private": true`, `"license": "MIT"`, `"bin": { "squishify": "dist/index.js" }` (not `squish` — the bare name is an existing unrelated npm package (0.2.3) and the bins would collide on PATH for users with both installed globally), `"files": ["dist"]` (keeps `src/`, tests, `tasks/` out of the tarball; npm auto-includes README + LICENSE), `"main"`/`"types"`/`"exports"` pointing at `dist/index.js` / `dist/index.d.ts`, `"prepublishOnly": "pnpm verify"`, `"keywords"`, and `"repository"` = `https://github.com/SpacemanPete/squishify.git`.
+  - [x] 14.3 Add `#!/usr/bin/env node` as line 1 of `src/index.ts` (tsc preserves it into `dist/index.js`) and change `intro("squooshy")` → `intro("squishify")`.
+  - [x] 14.4 Rename all remaining `squooshy` references: `README.md` (title + body + new global-install section: `npm i -g squishify` → run `squishify`), `.agents/AGENTS-NODE.md` (2 refs), this file (1 ref), and the test temp-dir prefixes in `src/index.test.ts` (`squooshy-prompt-`), `src/pipeline.test.ts` (`squooshy-e2e-`), `src/process.test.ts` (`squooshy-test-` and `squooshy-write`).
+  - [x] 14.5 Add `LICENSE` (MIT, 2026, Piotr Butkiewicz).
+  - [x] 14.6 Run `pnpm verify` and smoke-run `node src/index.ts`, then commit in repo style.
+- [x] 15.0 Programmatic API (`squishify(options)`) + `--help`/`--version` CLI flags (TDD)
+  - [x] 15.1 Write failing tests in `src/index.test.ts` for `validateSquishifyOptions`/`squishify`: a validation table covering every bad input → throws `SquishifyConfigError` with a clear message (dir missing / not a directory / unreadable / no supported images; format not one of the **output** formats jpeg|webp|avif|png — note `SUPPORTED_EXTENSIONS` also contains read-only gif/tif; resize `axis` not width|height or `maxDimension` not a positive finite number; `capBytes` not a positive finite number; `prefix`/`suffix`/`outputName` containing `/`, `\`, or `..`; `onProgress` not a function; `signal` not an AbortSignal). Happy path: `squishify({ dir, format: "webp" })` returns a `BatchResult` with `outputDir` defaulting to `…/processed`. Custom `outputName` honored. `AbortSignal` already aborted → `status: "cancelled"`, nothing written; aborting mid-run stops between files. `onProgress` called once per file with correct counts. Validation collects ALL problems into one error. Run tests to confirm they fail.
+  - [x] 15.2 Implement in `src/index.ts`: export `SquishifyOptions` (dir, format required; optional resize/capBytes/prefix/suffix/outputName/onProgress/signal), `class SquishifyConfigError extends Error`, `validateSquishifyOptions(options: unknown)` (collect-all-problems), and `squishify(options): Promise<BatchResult>` = validate → `pickOutputDir(dir, outputName)` → `runBatch(dir, outDir, config, { onProgress, isCancelled: () => signal?.aborted ?? false })`. Run tests until they pass.
+  - [x] 15.3 Write failing tests in `src/index.test.ts` for the flags: `main(["--help"])` prints usage and returns without prompting; `main(["-h"])` same; `main(["--version"])`/`main(["-v"])` prints the version from `package.json` (resolved via `createRequire(import.meta.url)("../package.json")` — works from both `src/` and `dist/`); no flags → normal prompt flow (existing tests still pass with `main()` defaulting to `process.argv.slice(2)`). Run tests to confirm they fail.
+  - [x] 15.4 Implement `main(argv = process.argv.slice(2))` handling `--help`/`-h` (usage text, exit 0) and `--version`/`-v` before any prompt. Run tests until they pass.
+  - [x] 15.5 Update `README.md`: "Programmatic API" section — example with all options, options table with validation rules, `SquishifyConfigError` semantics, AbortSignal cancellation, `onProgress` shape, and a note that importing the module never triggers the CLI (`import.meta.main` guard). Document `squishify --help` / `--version` and exit codes (0 success, 0 intentional cancel, 1 fatal).
+  - [x] 15.6 Run `pnpm verify` and smoke-run `node src/index.ts --version`, then commit in repo style.
+- [ ] 16.0 Build, verify, and publish to npm
+  - [x] 16.1 Run `pnpm build`; confirm `dist/index.js` starts with `#!/usr/bin/env node`; `chmod +x dist/index.js`; smoke-run `./dist/index.js --version` and `node dist/index.js`.
+  - [x] 16.2 Run `npm pack --dry-run` and confirm the tarball contains only `dist/`, `README.md`, `LICENSE`, `package.json` (no `src/`, tests, or `tasks/`).
+  - [x] 16.3 Install locally for testing: `pnpm link --global`, then run `squishify --help` / `--version` from another directory.
+  - [ ] 16.4 User: `npm login` (2FA required — npm is phasing out non-2FA publishing) and `npm whoami`; then `npm publish` (first publish claims the `squishify` name — there is no pre-registration).
+  - [ ] 16.5 Verify the published artifact: `npm i -g squishify`, run `squishify` on a real image folder end-to-end.
+  - [ ] 16.6 Final `pnpm verify` and commit in repo style.
+- [x] 17.0 GitHub Actions CI workflow
+  - [x] 17.1 Create `.github/workflows/ci.yml`: triggers on `pull_request` (targeting `main`) and `push` to `main`; ubuntu-latest; `pnpm/action-setup` (version from `packageManager`) before `actions/setup-node` (Node from `.nvmrc`, `cache: pnpm`); `pnpm install --frozen-lockfile`; `pnpm verify` (check + lint + format:check + test w/ coverage thresholds + build). Concurrency group cancels stale runs per ref.
+  - [x] 17.2 Local `pnpm verify` as the CI proxy (Actions can't run locally) and prettier check on the workflow file.
+  - [x] 17.3 Commit in repo style. Live verification happens on the first PR/push once the branch is on GitHub.
+
+## Follow-up Issues (from code review)
+
+_Collected during Phase 2 task reviews; not blocking, for potential later work._
+
+- **Unknown CLI flags are silently ignored** — `squishify --foo` falls through to the prompt flow instead of warning or printing usage (found during 15.0 review).
+- **Prefix/suffix prompt validation still permits `.`** while the programmatic API rejects it — harmless (a `.` prefix just makes a hidden file) but inconsistent (found during 15.0 review).
+- **`squishify()` does not expand `~` in `dir`** — prompt-only behavior, documented in the README; applying `expandHome` in the API would add symmetry.
