@@ -68,7 +68,7 @@ const FIXTURES = path.resolve("tests/fixtures");
 let dirs: string[] = [];
 
 async function makeDir(files: Record<string, string> = {}): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "squooshy-prompt-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "squishify-prompt-"));
   dirs.push(dir);
   for (const [name, src] of Object.entries(files)) {
     await copyFile(path.join(FIXTURES, src), path.join(dir, name));

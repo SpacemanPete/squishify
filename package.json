@@ -1,23 +1,55 @@
 {
-  "name": "squooshy",
-  "version": "0.1.0",
+  "name": "squishify",
+  "version": "1.0.0",
   "description": "Interactive CLI that batch-processes a folder of images for a design -> product workflow",
-  "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "packageManager": "pnpm@10.33.0",
+  "bin": {
+    "squishify": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SpacemanPete/squishify.git"
+  },
+  "keywords": [
+    "image",
+    "cli",
+    "batch",
+    "resize",
+    "convert",
+    "compress",
+    "optimize",
+    "webp",
+    "avif",
+    "sharp",
+    "interactive"
+  ],
   "scripts": {
     "dev": "node src/index.ts",
     "start": "node src/index.ts",
     "check": "tsc -p tsconfig.json",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/index.js",
     "test": "vitest run --coverage",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build"
+    "verify": "pnpm check && pnpm lint && pnpm format:check && pnpm test && pnpm build",
+    "prepublishOnly": "pnpm verify"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",

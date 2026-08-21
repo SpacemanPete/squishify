@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -454,7 +455,7 @@ export function renderReport(result: BatchResult): string {
 }
 
 export async function main(): Promise<void> {
-  intro("squooshy");
+  intro("squishify");
 
   const dir = await promptInputDirectory();
   if (dir === CANCEL) {

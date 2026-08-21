@@ -19,7 +19,7 @@ const FIXTURE_NAMES = [
 let tempDirs: string[] = [];
 
 async function tempCopyDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "squooshy-e2e-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "squishify-e2e-"));
   tempDirs.push(dir);
   for (const name of FIXTURE_NAMES) {
     await copyFile(path.join(FIXTURES, name), path.join(dir, name));

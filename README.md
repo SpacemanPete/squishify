@@ -1,4 +1,4 @@
-# squooshy
+# squishify
 
 An interactive CLI that batch-processes a folder of images for a design → product workflow. Answer a few prompts instead of remembering flags, and get back a clean, web-ready set of files in a `processed/` subfolder. Originals are never touched.
 
@@ -15,16 +15,32 @@ An interactive CLI that batch-processes a folder of images for a design → prod
 
 ## Requirements
 
-- Node.js 24 LTS (native TypeScript type stripping — no `tsx`).
-- pnpm.
+- Node.js 24 LTS.
+- pnpm (only for development from source; the installed CLI needs nothing else).
 
 ## Install
+
+Globally from npm:
+
+```sh
+npm i -g squishify
+```
+
+Or from source (requires pnpm):
 
 ```sh
 pnpm install
 ```
 
 ## Usage
+
+Installed globally, run it anywhere:
+
+```sh
+squishify
+```
+
+From a source checkout:
 
 ```sh
 pnpm start
@@ -68,7 +84,7 @@ Total output: 2.4 MB
 
 The folder prompt is clack's path finder: it starts in the current directory and suggests matching paths as you type — navigate with the arrow keys, hit Tab to accept a suggestion. A leading `~` is resolved to your home directory when you submit (the finder itself doesn't expand it while typing).
 
-`image.png` becomes `~/design/exports/exports/prod-image-web.webp`. Each run writes to a fresh output folder — if `<name>/` already holds files from an earlier run, squooshy picks the next free name (`<name>_2/`, `<name>_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
+`image.png` becomes `~/design/exports/exports/prod-image-web.webp`. Each run writes to a fresh output folder — if `<name>/` already holds files from an earlier run, squishify picks the next free name (`<name>_2/`, `<name>_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
 
 ## Supported formats
 

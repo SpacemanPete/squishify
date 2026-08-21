@@ -22,7 +22,7 @@ const FIXTURES = path.resolve("tests/fixtures");
 let tempDirs: string[] = [];
 
 async function tempOutDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "squooshy-test-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "squishify-test-"));
   tempDirs.push(dir);
   return dir;
 }
@@ -188,7 +188,7 @@ describe("writeTempAndRename (via processImage)", () => {
     if (result.status !== "ok") throw new Error("expected ok");
 
     expect(
-      vi.mocked(mkdtemp).mock.calls.some(([prefix]) => String(prefix).includes("squooshy-write")),
+      vi.mocked(mkdtemp).mock.calls.some(([prefix]) => String(prefix).includes("squishify-write")),
     ).toBe(false);
     const writeTarget = vi.mocked(writeFile).mock.calls[0]?.[0];
     expect(typeof writeTarget).toBe("string");

@@ -24,6 +24,7 @@
 - `src/pipeline.test.ts` — End-to-end smoke test over `tests/fixtures/` (copies fixtures to a temp dir; asserts outputs, byte-identical sources, 500 KB cap honored or reported unmeetable).
 - `tests/fixtures/` — Sample source images (JPEG, PNG, WebP, TIFF, plus one GIF) for end-to-end tests.
 - `README.md` — Usage instructions and an example run.
+- `LICENSE` — MIT license text (2026, Piotr Butkiewicz).
 
 ### Notes
 
@@ -105,10 +106,10 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 9.2 Write `src/pipeline.test.ts`, an end-to-end test that runs the full pipeline on the fixtures and asserts the expected number of outputs, correct filenames, and that `processed/` contains only expected files.
   - [x] 9.3 Add an end-to-end assertion that source fixtures are byte-identical after a run (hash compare) and that a 500 KB cap is honored or explicitly reported as unmeetable.
   - [x] 9.4 Run `pnpm verify` (check, lint, format:check, test with coverage thresholds, build), confirm `dist/` contains no `*.test.js`, and do a manual smoke run on a real image folder plus `node dist/index.js` from the built output — including confirming the live progress spinner updates during processing and that stdout contains only the final report.
-- [ ] 10.0 Bug remediation: fixes from the post-implementation review (2026-08-20)
+- [x] 10.0 Bug remediation: fixes from the post-implementation review (2026-08-20)
   - [x] 10.1 Write failing tests in `src/process.test.ts` for resize + cap combined: with both `resize` and `capBytes` set, the output must be resized to ≤ the max dimension AND under the cap (today `processImage` drops the resize when a cap is set — `findQualityUnderCap` gets the original buffer, `src/process.ts:57`). Run tests to confirm they fail.
   - [x] 10.2 Fix `processImage` (`src/process.ts`): materialize the resized buffer first (apply `pipeline.resize(...)`, then `toBuffer()`), pass that buffer to `findQualityUnderCap` so resize and cap compose. Run tests until they pass.
-  - [x] 10.3 Write failing tests in `src/process.test.ts` for the temp-write path: spy on `fs/promises` `writeFile`/`rename` to assert the temp file is created in the same directory as the output (not `os.tmpdir()` — cross-device `rename` fails with EXDEV on tmpfs `/tmp`), and that a failed write cleans up the temp file (no orphan `squooshy-write-*` entries). Run tests to confirm they fail.
+  - [x] 10.3 Write failing tests in `src/process.test.ts` for the temp-write path: spy on `fs/promises` `writeFile`/`rename` to assert the temp file is created in the same directory as the output (not `os.tmpdir()` — cross-device `rename` fails with EXDEV on tmpfs `/tmp`), and that a failed write cleans up the temp file (no orphan `squishify-write-*` entries). Run tests to confirm they fail.
   - [x] 10.4 Fix `writeTempAndRename` (`src/process.ts`): write a `.tmp` file next to the output target and `rename` within that directory; remove the temp in a `finally` on failure. Run tests until they pass.
   - [x] 10.5 Write failing tests in `src/index.test.ts` for rerun collision safety: `runBatch` over a folder whose `processed/` already contains an output name appends `-1` instead of overwriting (`usedNames` starts empty, `src/index.ts:293`). Run tests to confirm they fail.
   - [x] 10.6 Fix `runBatch` (`src/index.ts`): seed `usedNames` with the existing `processed/` directory listing before the loop (per the PRD's "shell gathers the directory listing and passes it in" design). Run tests until they pass.
@@ -117,7 +118,7 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 10.9 Write failing tests in `src/index.test.ts` for prefix/suffix validation: path separators (`/`, `\`) and `..` in prefix or suffix are rejected at the prompt (today `../` writes outside `processed/`). Run tests to confirm they fail.
   - [x] 10.10 Add a `validate` to the prefix/suffix prompts (`src/index.ts` `promptText`) rejecting path separators. Run tests until they pass.
   - [x] 10.11 Refactor error narrowing: replace `(error as Error).message` casts in `src/process.ts` (`readInput`) and `src/index.ts` (`runBatch` catch) with `error instanceof Error ? error.message : String(error)`; existing tests cover regression.
-  - [ ] 10.12 Fix double cancel messaging: `cancel("Cancelled.")` plus `outro("Cancelled.")` prints the cancellation twice — consolidate to one message in `main`; update the cancel tests accordingly.
+  - [x] 10.12 Fix double cancel messaging: `cancel("Cancelled.")` plus `outro("Cancelled.")` prints the cancellation twice — consolidate to one message in `main`; update the cancel tests accordingly.
   - [x] 10.13 Housekeeping: add a clean step to the `build` script so stale `dist/placeholder.*` from Task 1.6 is removed on build; move the stray top-level `it` in `src/index.test.ts` into a `describe`; dedupe `ProgressCounts` by importing it from `src/progress.ts`.
   - [x] 10.14 Refresh `README.md`: replace the "specified, not yet implemented" banner, align the example run with the real prompt strings, and document the intentional config divergences from `.agents/AGENTS-NODE.md` (tsconfig strictness flags, `rootDir`/`declarationMap`, `.prettierrc` `printWidth: 100`) per the project-wins rule.
   - [x] 10.15 Run `pnpm verify` (check, lint, format:check, test with coverage thresholds, build), confirm `dist/` contains no `*.test.js` and no `placeholder.*`, and smoke-run `node src/index.ts` plus `node dist/index.js`.
@@ -142,11 +143,11 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
 
 - [x] 14.0 Rename project to **squishify** + make the package publishable
   - [x] 14.1 Rename the GitHub repo via `gh repo rename squishify --yes` (updates local `origin` to `git@github.com:SpacemanPete/squishify.git`; old URL redirects). Local folder `/home/void/dev/projects/squooshy` stays as-is — disk name doesn't affect git.
-  - [ ] 14.2 Update `package.json`: `"name": "squishify"`, `"version": "1.0.0"`, remove `"private": true`, `"license": "MIT"`, `"bin": { "squishify": "dist/index.js" }` (not `squish` — the bare name is an existing unrelated npm package (0.2.3) and the bins would collide on PATH for users with both installed globally), `"files": ["dist"]` (keeps `src/`, tests, `tasks/` out of the tarball; npm auto-includes README + LICENSE), `"main"`/`"types"`/`"exports"` pointing at `dist/index.js` / `dist/index.d.ts`, `"prepublishOnly": "pnpm verify"`, `"keywords"`, and `"repository"` = `https://github.com/SpacemanPete/squishify.git`.
-  - [ ] 14.3 Add `#!/usr/bin/env node` as line 1 of `src/index.ts` (tsc preserves it into `dist/index.js`) and change `intro("squooshy")` → `intro("squishify")`.
-  - [ ] 14.4 Rename all remaining `squooshy` references: `README.md` (title + body + new global-install section: `npm i -g squishify` → run `squishify`), `.agents/AGENTS-NODE.md` (2 refs), this file (1 ref), and the test temp-dir prefixes in `src/index.test.ts` (`squooshy-prompt-`), `src/pipeline.test.ts` (`squooshy-e2e-`), `src/process.test.ts` (`squooshy-test-` and `squooshy-write`).
-  - [ ] 14.5 Add `LICENSE` (MIT, 2026, Piotr Butkiewicz).
-  - [ ] 14.6 Run `pnpm verify` and smoke-run `node src/index.ts`, then commit in repo style.
+  - [x] 14.2 Update `package.json`: `"name": "squishify"`, `"version": "1.0.0"`, remove `"private": true`, `"license": "MIT"`, `"bin": { "squishify": "dist/index.js" }` (not `squish` — the bare name is an existing unrelated npm package (0.2.3) and the bins would collide on PATH for users with both installed globally), `"files": ["dist"]` (keeps `src/`, tests, `tasks/` out of the tarball; npm auto-includes README + LICENSE), `"main"`/`"types"`/`"exports"` pointing at `dist/index.js` / `dist/index.d.ts`, `"prepublishOnly": "pnpm verify"`, `"keywords"`, and `"repository"` = `https://github.com/SpacemanPete/squishify.git`.
+  - [x] 14.3 Add `#!/usr/bin/env node` as line 1 of `src/index.ts` (tsc preserves it into `dist/index.js`) and change `intro("squooshy")` → `intro("squishify")`.
+  - [x] 14.4 Rename all remaining `squooshy` references: `README.md` (title + body + new global-install section: `npm i -g squishify` → run `squishify`), `.agents/AGENTS-NODE.md` (2 refs), this file (1 ref), and the test temp-dir prefixes in `src/index.test.ts` (`squooshy-prompt-`), `src/pipeline.test.ts` (`squooshy-e2e-`), `src/process.test.ts` (`squooshy-test-` and `squooshy-write`).
+  - [x] 14.5 Add `LICENSE` (MIT, 2026, Piotr Butkiewicz).
+  - [x] 14.6 Run `pnpm verify` and smoke-run `node src/index.ts`, then commit in repo style.
 - [ ] 15.0 Programmatic API (`squishify(options)`) + `--help`/`--version` CLI flags (TDD)
   - [ ] 15.1 Write failing tests in `src/index.test.ts` for `validateSquishifyOptions`/`squishify`: a validation table covering every bad input → throws `SquishifyConfigError` with a clear message (dir missing / not a directory / unreadable / no supported images; format not one of the **output** formats jpeg|webp|avif|png — note `SUPPORTED_EXTENSIONS` also contains read-only gif/tif; resize `axis` not width|height or `maxDimension` not a positive finite number; `capBytes` not a positive finite number; `prefix`/`suffix`/`outputName` containing `/`, `\`, or `..`; `onProgress` not a function; `signal` not an AbortSignal). Happy path: `squishify({ dir, format: "webp" })` returns a `BatchResult` with `outputDir` defaulting to `…/processed`. Custom `outputName` honored. `AbortSignal` already aborted → `status: "cancelled"`, nothing written; aborting mid-run stops between files. `onProgress` called once per file with correct counts. Validation collects ALL problems into one error. Run tests to confirm they fail.
   - [ ] 15.2 Implement in `src/index.ts`: export `SquishifyOptions` (dir, format required; optional resize/capBytes/prefix/suffix/outputName/onProgress/signal), `class SquishifyConfigError extends Error`, `validateSquishifyOptions(options: unknown)` (collect-all-problems), and `squishify(options): Promise<BatchResult>` = validate → `pickOutputDir(dir, outputName)` → `runBatch(dir, outDir, config, { onProgress, isCancelled: () => signal?.aborted ?? false })`. Run tests until they pass.
@@ -161,3 +162,9 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [ ] 16.4 User: `npm login` (2FA required — npm is phasing out non-2FA publishing) and `npm whoami`; then `npm publish` (first publish claims the `squishify` name — there is no pre-registration).
   - [ ] 16.5 Verify the published artifact: `npm i -g squishify`, run `squishify` on a real image folder end-to-end.
   - [ ] 16.6 Final `pnpm verify` and commit in repo style.
+
+## Follow-up Issues (from code review)
+
+_Collected during Phase 2 task reviews; not blocking, for potential later work._
+
+- (none yet)

@@ -138,7 +138,7 @@ This is not architectural taste; it is what makes the coverage gate meaningful. 
 functions reach high coverage with fast table-driven tests and no mocks, so the number
 in `## Testing` measures real logic rather than plumbing. → A.4
 
-A worked example, from squooshy's spec:
+A worked example, from squishify's spec:
 
 | Function | Kind | Why |
 |---|---|---|
@@ -430,7 +430,7 @@ Split the decisions out and they become pure string and number functions — 90%
 from table-driven tests in milliseconds with no mocks, and the number tracks logic.
 The shell stays thin enough to cover with a couple of end-to-end tests over fixtures.
 
-squooshy's PRD arrived at this shape before this doc existed: `buildOutputName`,
+squishify's PRD arrived at this shape before this doc existed: `buildOutputName`,
 `resolveCollision`, and `findQualityUnderCap` are all pure, with `processImage` as the
 shell. The standard is codifying a pattern already in use, not importing one.
 
