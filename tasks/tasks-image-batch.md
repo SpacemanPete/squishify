@@ -156,9 +156,9 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 15.5 Update `README.md`: "Programmatic API" section — example with all options, options table with validation rules, `SquishifyConfigError` semantics, AbortSignal cancellation, `onProgress` shape, and a note that importing the module never triggers the CLI (`import.meta.main` guard). Document `squishify --help` / `--version` and exit codes (0 success, 0 intentional cancel, 1 fatal).
   - [x] 15.6 Run `pnpm verify` and smoke-run `node src/index.ts --version`, then commit in repo style.
 - [ ] 16.0 Build, verify, and publish to npm
-  - [ ] 16.1 Run `pnpm build`; confirm `dist/index.js` starts with `#!/usr/bin/env node`; `chmod +x dist/index.js`; smoke-run `./dist/index.js --version` and `node dist/index.js`.
-  - [ ] 16.2 Run `npm pack --dry-run` and confirm the tarball contains only `dist/`, `README.md`, `LICENSE`, `package.json` (no `src/`, tests, or `tasks/`).
-  - [ ] 16.3 Install locally for testing: `pnpm link --global`, then run `squishify --help` / `--version` from another directory.
+  - [x] 16.1 Run `pnpm build`; confirm `dist/index.js` starts with `#!/usr/bin/env node`; `chmod +x dist/index.js`; smoke-run `./dist/index.js --version` and `node dist/index.js`.
+  - [x] 16.2 Run `npm pack --dry-run` and confirm the tarball contains only `dist/`, `README.md`, `LICENSE`, `package.json` (no `src/`, tests, or `tasks/`).
+  - [x] 16.3 Install locally for testing: `pnpm link --global`, then run `squishify --help` / `--version` from another directory.
   - [ ] 16.4 User: `npm login` (2FA required — npm is phasing out non-2FA publishing) and `npm whoami`; then `npm publish` (first publish claims the `squishify` name — there is no pre-registration).
   - [ ] 16.5 Verify the published artifact: `npm i -g squishify`, run `squishify` on a real image folder end-to-end.
   - [ ] 16.6 Final `pnpm verify` and commit in repo style.
