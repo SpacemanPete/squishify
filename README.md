@@ -48,6 +48,17 @@ pnpm start
 
 > `start` is an alias for `dev` (`node src/index.ts`); see Scripts.
 
+### CLI flags
+
+| Flag                  | Does                                 |
+| --------------------- | ------------------------------------ |
+| `squishify --help`    | Print usage and exit                 |
+| `squishify -h`        | Same as `--help`                     |
+| `squishify --version` | Print the installed version and exit |
+| `squishify -v`        | Same as `--version`                  |
+
+Exit codes: `0` on success (including an intentional cancel), `1` on an unexpected failure. Prompts and progress go to stderr; the final report is the only stdout output.
+
 ### Example run
 
 ```
@@ -85,6 +96,41 @@ Total output: 2.4 MB
 The folder prompt is clack's path finder: it starts in the current directory and suggests matching paths as you type — navigate with the arrow keys, hit Tab to accept a suggestion. A leading `~` is resolved to your home directory when you submit (the finder itself doesn't expand it while typing).
 
 `image.png` becomes `~/design/exports/exports/prod-image-web.webp`. Each run writes to a fresh output folder — if `<name>/` already holds files from an earlier run, squishify picks the next free name (`<name>_2/`, `<name>_3/`, …; an existing empty folder is reused), and that choice is shown in the summary before you confirm. The progress display goes to stderr; the final report is the only stdout output, so it stays scriptable.
+
+## Programmatic API
+
+The same pipeline is available as a library — importing the module never starts the CLI (the interactive entry only runs when executed directly):
+
+```ts
+import { squishify, SquishifyConfigError } from "squishify";
+
+const result = await squishify({
+  dir: "/design/exports",
+  format: "webp",
+  resize: { axis: "width", maxDimension: 2000 },
+  capBytes: 500 * 1024,
+  prefix: "prod-",
+  suffix: "-web",
+  outputName: "exports",
+  onProgress: (info) => console.error(`${info.index}/${info.total} — ${info.name}`),
+  signal: controller.signal,
+});
+```
+
+| Option              | Type                                                          | Default       | Notes                                                                                    |
+| ------------------- | ------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `dir`               | string                                                        | required      | Source folder; must exist, be readable, and contain at least one supported image         |
+| `format`            | `"jpeg" \| "webp" \| "avif" \| "png"`                         | required      | Output format (read-only formats like gif/tiff are rejected)                             |
+| `resize`            | `{ axis: "width" \| "height", maxDimension: number } \| null` | `null`        | Fit within the max dimension; aspect ratio preserved; no upscaling                       |
+| `capBytes`          | number \| null                                                | `null`        | Per-file size cap via the quality-reduction loop                                         |
+| `prefix` / `suffix` | string                                                        | `""`          | Output naming; path separators and `..` rejected                                         |
+| `outputName`        | string                                                        | `"processed"` | Output folder base name; a fresh numbered folder (`name`, `name_2`, …) is picked per run |
+| `onProgress`        | `(info) => void`                                              | —             | Called once per file with `{ index, total, name, counts }`                               |
+| `signal`            | AbortSignal                                                   | —             | Aborts between files; the result carries `status: "cancelled"`                           |
+
+Malformed options throw a single `SquishifyConfigError` that lists **all** problems — nothing is written to disk. An already-aborted signal returns a cancelled result without creating the output folder. The resolved `BatchResult` mirrors the CLI report: `status`, `processed`, `skipped`, `errors`, `totalOutputBytes`, and `outputDir`.
+
+Note: `~` is expanded only by the interactive prompt — pass an absolute path in `dir`.
 
 ## Supported formats
 

@@ -56,8 +56,12 @@ import {
   main,
   renderReport,
   runWithSpinner,
+  squishify,
   summaryText,
+  validateSquishifyOptions,
+  SquishifyConfigError,
   type BatchResult,
+  type ProgressInfo,
   type PromptConfig,
 } from "./index.ts";
 
@@ -167,6 +171,7 @@ describe("promptOutputName", () => {
     expect(validate?.("../evil")).toBeTruthy();
     expect(validate?.("a/b")).toBeTruthy();
     expect(validate?.("a\\b")).toBeTruthy();
+    expect(validate?.(".")).toBeTruthy();
     expect(validate?.("web")).toBeUndefined();
   });
 
@@ -498,6 +503,191 @@ describe("pickOutputDir", () => {
   });
 });
 
+describe("validateSquishifyOptions", () => {
+  it("normalizes a minimal valid object with defaults", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    await expect(validateSquishifyOptions({ dir, format: "webp" })).resolves.toEqual({
+      dir,
+      format: "webp",
+      resize: null,
+      capBytes: null,
+      prefix: "",
+      suffix: "",
+      outputName: "processed",
+    });
+  });
+
+  it("rejects non-object options", async () => {
+    for (const bad of [undefined, null, "x", 42, ["dir"]]) {
+      await expect(validateSquishifyOptions(bad)).rejects.toThrow(SquishifyConfigError);
+      await expect(validateSquishifyOptions(bad)).rejects.toThrow("options must be an object");
+    }
+  });
+
+  it("rejects a bad dir", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    for (const bad of [undefined, 42, ""]) {
+      await expect(validateSquishifyOptions({ dir: bad, format: "webp" })).rejects.toThrow(
+        "dir must be a non-empty string",
+      );
+    }
+    await expect(
+      validateSquishifyOptions({ dir: path.join(dir, "nope"), format: "webp" }),
+    ).rejects.toThrow("dir does not exist");
+    await expect(
+      validateSquishifyOptions({ dir: path.join(dir, "photo.jpg"), format: "webp" }),
+    ).rejects.toThrow("dir is not a directory");
+    const empty = await makeDir();
+    await writeFile(path.join(empty, "notes.txt"), "x");
+    await expect(validateSquishifyOptions({ dir: empty, format: "webp" })).rejects.toThrow(
+      "dir contains no supported images",
+    );
+  });
+
+  it("rejects formats outside the output set (including read-only ones)", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    for (const bad of ["gif", "tiff", "jpg", "bmp", 42, undefined]) {
+      await expect(validateSquishifyOptions({ dir, format: bad })).rejects.toThrow(
+        "format must be one of jpeg, webp, avif, or png",
+      );
+    }
+  });
+
+  it("rejects a malformed resize", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    await expect(validateSquishifyOptions({ dir, format: "webp", resize: "wide" })).rejects.toThrow(
+      "resize must be an object",
+    );
+    await expect(
+      validateSquishifyOptions({
+        dir,
+        format: "webp",
+        resize: { axis: "diagonal", maxDimension: 100 },
+      }),
+    ).rejects.toThrow('resize.axis must be "width" or "height"');
+    for (const bad of [0, -5, Number.NaN, "2000"]) {
+      await expect(
+        validateSquishifyOptions({
+          dir,
+          format: "webp",
+          resize: { axis: "width", maxDimension: bad },
+        }),
+      ).rejects.toThrow("resize.maxDimension must be a positive number");
+    }
+  });
+
+  it("rejects a bad capBytes", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    for (const bad of [0, -1, Number.NaN, "500"]) {
+      await expect(
+        validateSquishifyOptions({ dir, format: "webp", capBytes: bad }),
+      ).rejects.toThrow("capBytes must be a positive number");
+    }
+  });
+
+  it("rejects separators and dot-names in prefix, suffix, and outputName", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    for (const field of ["prefix", "suffix", "outputName"]) {
+      for (const bad of ["a/b", "..", "a\\b", "."]) {
+        await expect(
+          validateSquishifyOptions({ dir, format: "webp", [field]: bad }),
+        ).rejects.toThrow(`${field} must not contain`);
+      }
+    }
+  });
+
+  it("rejects a non-function onProgress and a non-AbortSignal signal", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    await expect(
+      validateSquishifyOptions({ dir, format: "webp", onProgress: "nope" }),
+    ).rejects.toThrow("onProgress must be a function");
+    await expect(validateSquishifyOptions({ dir, format: "webp", signal: "nope" })).rejects.toThrow(
+      "signal must be an AbortSignal",
+    );
+  });
+
+  it("collects all problems into one error", async () => {
+    await expect(validateSquishifyOptions({ format: "gif", capBytes: -1 })).rejects.toThrow(
+      /dir must be a non-empty string.*format must be one of.*capBytes must be a positive number/,
+    );
+  });
+});
+
+describe("squishify", () => {
+  it("runs the pipeline and defaults the output dir to processed/", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    const result = await squishify({ dir, format: "webp", prefix: "p-", suffix: "-s" });
+    expect(result.status).toBe("completed");
+    expect(result.processed[0]?.output).toBe("p-photo-s.webp");
+    expect(result.outputDir).toBe(path.join(dir, "processed"));
+    expect(await readdir(path.join(dir, "processed"))).toEqual(["p-photo-s.webp"]);
+  });
+
+  it("honors a custom outputName", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    const result = await squishify({ dir, format: "jpeg", outputName: "web" });
+    expect(result.outputDir).toBe(path.join(dir, "web"));
+  });
+
+  it("throws SquishifyConfigError on malformed options without touching the filesystem", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    await expect(
+      squishify({ dir, format: "gif" } as unknown as Parameters<typeof squishify>[0]),
+    ).rejects.toThrow(SquishifyConfigError);
+    expect(await readdir(dir)).toEqual(["photo.jpg"]);
+  });
+
+  it("returns cancelled with no writes when the signal is already aborted", async () => {
+    const dir = await makeDir({ "photo.jpg": "photo.jpg" });
+    const controller = new AbortController();
+    controller.abort();
+    const result = await squishify({ dir, format: "jpeg", signal: controller.signal });
+    expect(result.status).toBe("cancelled");
+    expect(result.processed).toHaveLength(0);
+    expect(await readdir(dir)).toEqual(["photo.jpg"]);
+  });
+
+  it("stops between files when the signal aborts mid-run", async () => {
+    const dir = await makeDir({
+      "a.jpg": "photo.jpg",
+      "b.png": "photo.png",
+      "c.webp": "photo.webp",
+    });
+    const controller = new AbortController();
+    const result = await squishify({
+      dir,
+      format: "jpeg",
+      onProgress: (info) => {
+        if (info.index === 2) controller.abort();
+      },
+      signal: controller.signal,
+    });
+    expect(result.status).toBe("cancelled");
+    expect(result.processed).toHaveLength(1);
+    const outputs = await readdir(path.join(dir, "processed"));
+    expect(outputs).toEqual(["a.jpeg"]);
+  });
+
+  it("calls onProgress once per file with running counts", async () => {
+    const dir = await makeDir({
+      "a.jpg": "photo.jpg",
+      "b.png": "photo.png",
+      "c.webp": "photo.webp",
+    });
+    const calls: { index: number; total: number; counts: ProgressInfo["counts"] }[] = [];
+    const result = await squishify({
+      dir,
+      format: "jpeg",
+      onProgress: (info) =>
+        calls.push({ index: info.index, total: info.total, counts: info.counts }),
+    });
+    expect(result.status).toBe("completed");
+    expect(calls.map((c) => c.index)).toEqual([1, 2, 3]);
+    expect(calls.map((c) => c.total)).toEqual([3, 3, 3]);
+    expect(calls[2]?.counts).toEqual({ processed: 2, skipped: 0, errors: 0 });
+  });
+});
+
 describe("runBatch", () => {
   const minimal: PromptConfig = {
     resize: null,
@@ -766,6 +956,40 @@ describe("renderReport", () => {
 });
 
 describe("main", () => {
+  it("prints usage for --help without prompting", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["--help"]);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Usage"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("squishify"));
+    expect(mocks.intro).not.toHaveBeenCalled();
+    expect(mocks.path).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it("prints usage for -h without prompting", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["-h"]);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Usage"));
+    expect(mocks.intro).not.toHaveBeenCalled();
+  });
+
+  it("prints the package version for --version without prompting", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["--version"]);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith("1.0.0");
+    expect(mocks.intro).not.toHaveBeenCalled();
+    expect(mocks.path).not.toHaveBeenCalled();
+  });
+
+  it("prints the package version for -v without prompting", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["-v"]);
+    expect(logSpy).toHaveBeenCalledWith("1.0.0");
+    expect(mocks.intro).not.toHaveBeenCalled();
+  });
+
   it("runs the full flow and prints only the final report to stdout", async () => {
     const dir = await makeDir({ "photo.jpg": "photo.jpg" });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});

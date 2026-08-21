@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, readdir, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -40,6 +41,12 @@ export function expandHome(input: string, homeDir: string = homedir()): string {
   if (input === "~") return homeDir;
   if (input.startsWith("~/")) return homeDir + input.slice(1);
   return input;
+}
+
+const OUTPUT_FORMATS = new Set<string>(["jpeg", "webp", "avif", "png"]);
+
+function hasSeparator(value: string): boolean {
+  return /[/\\]|\.\./.test(value);
 }
 
 export async function promptInputDirectory(): Promise<string | typeof CANCEL> {
@@ -174,7 +181,7 @@ async function promptText(message: string, placeholder: string): Promise<string 
     message,
     placeholder,
     validate: (input) =>
-      /[/\\]|\.\./.test(input ?? "") ? "Must not contain path separators (/, \\, ..)." : undefined,
+      hasSeparator(input ?? "") ? "Must not contain path separators (/, \\, ..)." : undefined,
   });
   if (isCancel(value)) return cancelRun();
   return String(value).trim();
@@ -190,7 +197,9 @@ export async function promptOutputName(): Promise<string | typeof CANCEL> {
     message: "Output folder name?",
     placeholder: "processed",
     validate: (input) =>
-      /[/\\]|\.\./.test(input ?? "") ? "Must not contain path separators (/, \\, ..)." : undefined,
+      hasSeparator(input ?? "") || (input ?? "").trim() === "."
+        ? 'Must not contain path separators (/, \\, ..) or be ".".'
+        : undefined,
   });
   if (isCancel(value)) return cancelRun();
   const name = String(value).trim();
@@ -278,6 +287,176 @@ export async function pickOutputDir(dir: string, baseName = "processed"): Promis
       if (entries.length === 0) return candidate;
     }
   }
+}
+
+export interface SquishifyOptions {
+  dir: string;
+  format: OutputFormat;
+  resize?: { axis: ResizeAxis; maxDimension: number } | null;
+  capBytes?: number | null;
+  prefix?: string;
+  suffix?: string;
+  outputName?: string;
+  onProgress?: (info: ProgressInfo) => void;
+  signal?: AbortSignal;
+}
+
+export class SquishifyConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SquishifyConfigError";
+  }
+}
+
+export async function validateSquishifyOptions(options: unknown): Promise<SquishifyOptions> {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new SquishifyConfigError("Invalid squishify options: options must be an object");
+  }
+  const o = options as Record<string, unknown>;
+  const problems: string[] = [];
+
+  const dir = o.dir;
+  if (typeof dir !== "string" || dir === "") {
+    problems.push("dir must be a non-empty string");
+  } else {
+    let info;
+    try {
+      info = await stat(dir);
+    } catch {
+      problems.push(`dir does not exist: ${dir}`);
+    }
+    if (info && !info.isDirectory()) {
+      problems.push(`dir is not a directory: ${dir}`);
+    }
+    if (info?.isDirectory()) {
+      let files: string[] | undefined;
+      try {
+        files = await listImages(dir);
+      } catch {
+        problems.push(`dir cannot be read: ${dir}`);
+      }
+      if (files !== undefined && files.length === 0) {
+        problems.push(`dir contains no supported images: ${dir}`);
+      }
+    }
+  }
+
+  const format = o.format;
+  if (typeof format !== "string" || !OUTPUT_FORMATS.has(format)) {
+    problems.push("format must be one of jpeg, webp, avif, or png");
+  }
+
+  const resize = o.resize;
+  if (resize !== undefined && resize !== null) {
+    if (typeof resize !== "object" || resize === null) {
+      problems.push("resize must be an object with axis and maxDimension");
+    } else {
+      const r = resize as Record<string, unknown>;
+      if (r.axis !== "width" && r.axis !== "height") {
+        problems.push('resize.axis must be "width" or "height"');
+      }
+      if (
+        typeof r.maxDimension !== "number" ||
+        !Number.isFinite(r.maxDimension) ||
+        r.maxDimension <= 0
+      ) {
+        problems.push("resize.maxDimension must be a positive number");
+      }
+    }
+  }
+
+  const capBytes = o.capBytes;
+  if (
+    capBytes !== undefined &&
+    capBytes !== null &&
+    (typeof capBytes !== "number" || !Number.isFinite(capBytes) || capBytes <= 0)
+  ) {
+    problems.push("capBytes must be a positive number");
+  }
+
+  for (const field of ["prefix", "suffix"] as const) {
+    const value = o[field];
+    if (value === undefined) continue;
+    if (typeof value !== "string") {
+      problems.push(`${field} must be a string`);
+    } else if (hasSeparator(value) || value.trim() === "." || value.trim() === "..") {
+      problems.push(`${field} must not contain path separators (/, \\, ..) or be "."/".."`);
+    }
+  }
+
+  const outputName = o.outputName;
+  let normalizedOutputName = "processed";
+  if (outputName !== undefined) {
+    if (typeof outputName !== "string") {
+      problems.push("outputName must be a string");
+    } else if (
+      hasSeparator(outputName) ||
+      outputName.trim() === "." ||
+      outputName.trim() === ".."
+    ) {
+      problems.push(`outputName must not contain path separators (/, \\, ..) or be "."/".."`);
+    } else if (outputName.trim() !== "") {
+      normalizedOutputName = outputName.trim();
+    }
+  }
+
+  const onProgress = o.onProgress;
+  if (onProgress !== undefined && typeof onProgress !== "function") {
+    problems.push("onProgress must be a function");
+  }
+
+  const signal = o.signal;
+  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+    problems.push("signal must be an AbortSignal");
+  }
+
+  if (problems.length > 0) {
+    throw new SquishifyConfigError(`Invalid squishify options: ${problems.join("; ")}`);
+  }
+
+  return {
+    dir: dir as string,
+    format: format as OutputFormat,
+    resize: (resize as SquishifyOptions["resize"]) ?? null,
+    capBytes: (capBytes as number | null) ?? null,
+    prefix: (o.prefix as string | undefined) ?? "",
+    suffix: (o.suffix as string | undefined) ?? "",
+    outputName: normalizedOutputName,
+    ...(onProgress !== undefined
+      ? { onProgress: onProgress as NonNullable<SquishifyOptions["onProgress"]> }
+      : {}),
+    ...(signal !== undefined ? { signal: signal as AbortSignal } : {}),
+  };
+}
+
+export async function squishify(options: SquishifyOptions): Promise<BatchResult> {
+  const o = await validateSquishifyOptions(options);
+  const outDir = await pickOutputDir(o.dir, o.outputName);
+  if (o.signal?.aborted) {
+    return {
+      status: "cancelled",
+      processed: [],
+      skipped: [],
+      errors: [],
+      totalOutputBytes: 0,
+      outputDir: outDir,
+    };
+  }
+  return runBatch(
+    o.dir,
+    outDir,
+    {
+      resize: o.resize ?? null,
+      format: o.format,
+      capBytes: o.capBytes ?? null,
+      prefix: o.prefix ?? "",
+      suffix: o.suffix ?? "",
+    },
+    {
+      ...(o.onProgress ? { onProgress: o.onProgress } : {}),
+      ...(o.signal ? { isCancelled: () => o.signal?.aborted ?? false } : {}),
+    },
+  );
 }
 
 export interface ProcessedEntry {
@@ -454,7 +633,33 @@ export function renderReport(result: BatchResult): string {
   return lines.join("\n");
 }
 
-export async function main(): Promise<void> {
+function getVersion(): string {
+  const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
+  return pkg.version;
+}
+
+function usageText(): string {
+  return [
+    `squishify v${getVersion()} — interactive batch image processor`,
+    "",
+    "Usage:",
+    "  squishify              Start the interactive prompt flow",
+    "  squishify --help       Show this help",
+    "  squishify --version    Print the version",
+    "",
+    "Docs: https://github.com/SpacemanPete/squishify",
+  ].join("\n");
+}
+
+export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(usageText());
+    return;
+  }
+  if (argv.includes("--version") || argv.includes("-v")) {
+    console.log(getVersion());
+    return;
+  }
   intro("squishify");
 
   const dir = await promptInputDirectory();
