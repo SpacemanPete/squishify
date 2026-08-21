@@ -2,7 +2,7 @@
 
 ## Introduction / Overview
 
-A standalone interactive command-line application that walks the user through a short series of prompts and then batch-processes a folder of images for a design→product workflow. Instead of remembering command-line flags or writing ad-hoc scripts each time, the user answers questions, the tool applies consistent processing rules, and outputs a clean, web-ready set of files in a subfolder.
+A standalone interactive command-line application that walks the user through a short series of prompts and then batch-processes a folder of images for a design→product workflow. Instead of remembering command-line flags or writing ad-hoc scripts each time, the user answers questions, the tool applies consistent processing rules, and outputs a clean, web-ready set of files in a subfolder. The tool ships as the npm package **`squishify`** (CLI binary `squishify`, Node ≥ 24) and also exposes a programmatic API (`squishify(options)`) for scripted use.
 
 **Problem:** Preparing a set of design exports for use in a product (web build, print, CMS upload, or client delivery) is repetitive: images must be resized to fit, converted to a target format, kept under a size budget, and given consistent names. Doing this by hand is slow and error-prone, and shell one-liners don't prompt or apply rules consistently.
 
@@ -20,6 +20,8 @@ A standalone interactive command-line application that walks the user through a 
 6. Output predictable filenames via a user-supplied prefix, suffix, or both (e.g. `prod-` / `-web`).
 7. Print a clear summary at the end: files processed, skipped, errors, and resulting sizes.
 8. Show live progress while processing so the user can monitor a long batch run.
+9. Expose a validated programmatic API (`squishify(options)`) so the same batch pipeline can run from scripts and libraries without prompts.
+10. Ship as a publishable npm package installable globally (`npm i -g squishify`), with `--help` / `--version` CLI flags.
 
 ---
 
@@ -60,6 +62,14 @@ As a user running a large batch, I want to see what the tool is doing right now 
 - The progress display never hides or interferes with the final per-file report.
 - If I cancel mid-run, the progress display disappears cleanly and no partial files remain.
 
+### Build engineer — scripted automation
+
+As a build engineer, I want to run the same batch processing programmatically by passing an options object so that my build script can produce optimized assets without interactive prompts.
+
+- I import `squishify` and call it with `{ dir, format, ... }`.
+- Invalid or malformed options throw a single `SquishifyConfigError` that lists every problem, so I can fix my call in one pass.
+- I can cancel a long run with an `AbortSignal` and get a `cancelled` result with no partial files.
+
 ---
 
 ## Functional Requirements
@@ -68,12 +78,13 @@ As a user running a large batch, I want to see what the tool is doing right now 
 
 1. The CLI MUST run as an interactive Node.js program using prompts (e.g. `@clack/prompts` or `inquirer`).
 2. The CLI MUST prompt for, in order:
-   - **Input directory** — path to a folder of source images. Validate the path exists, is a directory, and contains at least one supported image file. Offer default suggestions and a "re-enter" loop on invalid input.
+   - **Input directory** — path to a folder of source images, entered via a type-ahead path finder (clack `path` prompt rooted at the current directory; arrow keys to navigate, Tab to complete). A leading `~` is expanded to the home directory on submit. Validate the path exists, is a directory, and contains at least one supported image file; a "re-enter" loop with a friendly message on invalid input.
    - **Resize?** — yes/no. If yes, ask whether to fit by **max width** or **max height** and the pixel value (positive integer).
    - **Output format** — menu selection: WebP, JPEG, PNG, AVIF.
    - **Per-file size cap?** — yes/no. If yes, ask for the cap value with unit (KB or MB).
    - **Prefix** — optional string prepended to each output filename.
    - **Suffix** — optional string appended to each output filename (before the extension).
+   - **Output folder name** — optional custom name for the output subfolder; blank defaults to `processed`. Path separators are rejected.
 3. The CLI MUST show a final confirmation summary of all answers and a Y/n confirmation before processing begins.
 4. The CLI MUST support cancelling at any prompt (Ctrl-C / cancel key) with a clean exit message and no partial writes.
 
@@ -93,7 +104,7 @@ As a user running a large batch, I want to see what the tool is doing right now 
 
 ### Output & naming
 
-13. Output files MUST be written to a `processed/` subfolder inside the source directory (`<source-dir>/processed/`), created if missing.
+13. Output files MUST be written to a fresh output subfolder inside the source directory, created if missing. The base name comes from the output-folder prompt (blank = `processed`); each run picks the first available `<name>/`, `<name>_2/`, `<name>_3/`, … where "available" means the folder does not exist or exists but is empty (files or non-empty dirs block it). A rerun therefore never mingles with earlier output. The resolved path MUST appear in the pre-run confirmation summary and in the final report.
 14. Output filenames MUST follow `[prefix]<original-basename>[suffix].<new-ext>` (e.g. `image.png` + prefix `prod-` + suffix `-web` + WebP → `prod-image-web.webp`).
 15. On filename collision within `processed/`, the tool MUST append `-1`, `-2`, etc. instead of overwriting.
 16. The tool MUST not leave partially-written files behind if processing fails mid-way; write to a temp file then rename into place.
@@ -115,11 +126,24 @@ As a user running a large batch, I want to see what the tool is doing right now 
 23. Unsupported or corrupt files MUST be skipped with a logged reason (not crash the whole run).
 24. Permission errors, missing source folder, or an empty folder MUST produce a friendly error and return to the input prompt rather than exiting abruptly.
 
+### CLI flags
+
+25. `squishify --help` / `squishify -h` MUST print usage instructions and exit 0 without showing any prompt.
+26. `squishify --version` / `squishify -v` MUST print the package version (read from `package.json`) and exit 0 without showing any prompt.
+
+### Programmatic API
+
+27. The package MUST export a programmatic entry point `squishify(options): Promise<BatchResult>` that runs the same batch pipeline (resize, convert, cap, naming, fresh output dir) without prompts.
+28. `SquishifyOptions` MUST accept: `dir` (required), `format` (required; one of the output formats jpeg|webp|avif|png), and optional `resize` (`{ axis: "width" | "height", maxDimension }`), `capBytes`, `prefix`, `suffix`, `outputName` (default `processed`), `onProgress`, and `signal` (AbortSignal).
+29. Malformed calls MUST throw a single `SquishifyConfigError` listing ALL validation problems, covering: missing/non-directory/unreadable/image-less `dir`; `format` outside the output set (read-only formats like gif/tif are not valid outputs); invalid `resize` axis or non-positive `maxDimension`; non-positive `capBytes`; `prefix`/`suffix`/`outputName` containing path separators or `..`; non-function `onProgress`; non-AbortSignal `signal`.
+30. Cancellation: an already-aborted `signal` MUST return `status: "cancelled"` without writing anything; aborting mid-run MUST stop between files with no partial writes (the last completed file may remain, consistent with the CLI's per-file writes).
+31. Importing the package MUST NOT start the CLI — the interactive entry runs only when executed directly (`import.meta.main` guard).
+
 ---
 
 ## Non-Goals (Out of Scope)
 
-- GUI / web interface — CLI only.
+- GUI / web interface — CLI and programmatic API only (no server, no web UI).
 - Watch mode / folder auto-processing on file drop.
 - Cloud upload, CDN pushing, or CMS integration.
 - Batch renaming without processing (pure rename mode).
@@ -164,7 +188,7 @@ Rules this implies:
 ### Proposed prompt sequence
 
 ```
-? Select a folder of images: [path picker / typed path]
+? Select a folder of images: [type-ahead path finder / typed path; ~ expands on submit]
 ? Resize images to fit? [yes / no]
   ? Fit by max [width / height]: 2000
 ? Output format: [WebP / JPEG / PNG / AVIF]
@@ -172,10 +196,11 @@ Rules this implies:
   ? Max file size [KB/MB]: 500 KB
 ? Prefix (optional): prod-
 ? Suffix (optional): -web
+? Output folder name [blank = processed]: exports
 
 Summary:
   Source: ~/design/exports
-  Output: ~/design/exports/processed
+  Output: ~/design/exports/exports
   Resize: fit width ≤ 2000px
   Format: webp
   Cap: 500 KB
@@ -187,6 +212,16 @@ Process 24 images? [y/N]
 
 Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
 ```
+
+*(The output path is resolved before the summary and shown there — blank gives `processed/`, occupied folders roll to `processed_2/`, `processed_3/`, …; custom names number the same way.)*
+
+### Programmatic API and publication
+
+- The package is published to npm as `squishify` (v1.0.0, MIT, repository `SpacemanPete/squishify`). The bin is also `squishify` — NOT `squish`, because an unrelated existing npm package owns the `squish` name and a shared bin name would collide on PATH for users with both installed globally.
+- `squishify(options)` is the programmatic entry: validate → `pickOutputDir(dir, outputName)` → `runBatch(dir, outDir, config, { onProgress, isCancelled: () => signal?.aborted ?? false })`. It reuses the CLI's exact pipeline, so interactive and scripted runs behave identically.
+- Validation lives in the shell module (`src/index.ts`) and collects all problems into one `SquishifyConfigError` — no first-error-only surprises.
+- The CLI entry is `main(argv = process.argv.slice(2))`; `--help` / `--version` are handled before any prompt (version resolved via `createRequire(import.meta.url)("../package.json")`, correct from both `src/` and `dist/`).
+- The `import.meta.main` guard keeps the module inert when imported.
 
 ---
 
@@ -211,6 +246,9 @@ Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
 | Concurrency | Process files sequentially or with a small bounded pool (e.g. 4). Never `Promise.all` over the whole folder — bounded concurrency is a house rule |
 | Errors/async | `catch` binds `unknown` and narrows before use; preserve `cause` when rethrowing; `AbortSignal` for anything cancellable (Ctrl-C); no floating promises (lint-enforced) |
 | Exit codes | Exit non-zero on failure, set in the shell only; a pure function never calls `process.exit` |
+| Publication | npm package `squishify` v1.0.0, MIT; `bin` `squishify` → `dist/index.js`; `files: ["dist"]`; `main`/`types`/`exports` → `dist/index.js` + `dist/index.d.ts`; `prepublishOnly: pnpm verify`; `repository` `https://github.com/SpacemanPete/squishify.git`; shebang `#!/usr/bin/env node` in `dist/index.js`. The first `npm publish` claims the name (npm has no reservation); publishing requires 2FA |
+| Programmatic API | `squishify(options)` exported from the package entry; `SquishifyOptions` (dir + format required; optional resize/capBytes/prefix/suffix/outputName/onProgress/signal); `validateSquishifyOptions` collects ALL problems into one `SquishifyConfigError`; AbortSignal → `status: "cancelled"` (abort checked between files); importing the module never runs the CLI (`import.meta.main` guard) |
+| CLI flags | `main(argv = process.argv.slice(2))` handles `--help`/`-h` (usage, exit 0) and `--version`/`-v` (version via `createRequire(import.meta.url)("../package.json")`, exit 0) before any prompt |
 
 **Key files to create:**
 
@@ -245,6 +283,9 @@ Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
 | UX | Prompt flow completable end-to-end with defaults alone in ≤ 60 seconds |
 | Progress | A 24-image run shows a live per-file spinner counter (`i/total` + running processed/skipped/errors) that updates during processing; stdout contains only the final report |
 | Quality | `pnpm verify` exits 0 from the project root; `node dist/index.js` runs the CLI from the built output |
+| Rename | No `squooshy` references remain in docs, banner, or tests — package/repo/bin are `squishify` |
+| Publication | `npm pack --dry-run` shows only `dist/` + README + LICENSE + package.json; `npm publish` succeeds; `npm i -g squishify` installs and `squishify --help` / `--version` work |
+| Programmatic API | A script calling `squishify({ dir, format: "webp" })` returns a `BatchResult` with the correct `outputDir`; every malformed option produces one `SquishifyConfigError` listing all problems |
 
 ---
 
@@ -257,6 +298,9 @@ Processed 24 images — 22 ok, 1 skipped, 1 error (2.4 MB total).
 - [ ] every new pure core module added to `coverage.include` in `vitest.config.ts`
 - [ ] `pnpm build` — emits, and `dist/` contains no `*.test.js`
 - [ ] `node dist/index.js` runs
+- [ ] `node dist/index.js --help` / `--version` exit 0
+- [ ] `npm pack --dry-run` contains only `dist/`, `README.md`, `LICENSE`, `package.json`
+- [ ] `squishify({ dir, format })` runs the pipeline programmatically and throws `SquishifyConfigError` on malformed options
 
 Do not report a task done on a subset of these; if one fails for a reason outside the task's scope, say which and why.
 
@@ -283,6 +327,16 @@ Do not report a task done on a subset of these; if one fails for a reason outsid
 
 10. **Progress display:** `@clack/prompts` `spinner()` driven per file — no new dependency (A). Message form is pure `src/progress.ts` (`formatProgress`), rendering to stderr so stdout stays pipeable; spinner stops before the final report and on cancel (A).
 
+*Resolved during publication + API kickoff (2026-08-20):*
+
+11. **Package name:** `squishify` (A) — the bare `squish` and `squishy` names are taken on npm by unrelated packages; the bin is also `squishify` to avoid PATH collisions with the existing `squish` package.
+12. **Repository:** GitHub repo renamed `SpacemanPete/squooshy` → `SpacemanPete/squishify` via `gh repo rename`; the old URL redirects (A).
+13. **First release:** v1.0.0, MIT license (A).
+14. **Output folder:** prompted custom name, blank = `processed`, fresh numbered dirs per run (A) — supersedes the fixed `processed/` of req 13.
+15. **Programmatic API:** exported `squishify(options)` with collect-all-problems validation throwing `SquishifyConfigError`; AbortSignal cancels between files; module import never triggers the CLI (A).
+16. **CLI flags:** `--help` / `--version` handled before any prompt, exit 0 (A).
+17. **npm registration:** none — the first `npm publish` claims the `squishify` name; publishing requires 2FA (A).
+
 *No remaining open questions.*
 
 ---
@@ -299,3 +353,6 @@ Do not report a task done on a subset of these; if one fails for a reason outsid
 8. Wire orchestration: walk folder → process each → drive progress spinner → write to `processed/` → report summary.
 9. Add a sample fixture set + `src/pipeline.test.ts` end-to-end smoke test.
 10. Run `pnpm verify` and manually smoke-run on a real image folder; confirm `node dist/index.js` runs the built CLI.
+11. Rename the project to `squishify` and make the package publishable: bin + shebang, `files`/`exports`/`main`/`types`, `prepublishOnly`, MIT `LICENSE`, repository metadata, README global-install docs.
+12. Add the programmatic API (`squishify(options)`, `SquishifyOptions`, `validateSquishifyOptions`, `SquishifyConfigError`) and the CLI `--help` / `--version` flags (TDD).
+13. Build and verify the publishable artifact (`npm pack --dry-run`, global-link test), publish to npm, and verify `npm i -g squishify`.

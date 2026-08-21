@@ -51,6 +51,8 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
 
 ## Tasks
 
+### Phase 1
+
 - [x] 0.0 Create feature branch
   - [x] 0.1 Create and checkout a new branch for this feature (`git checkout -b feature/image-batch`)
 - [x] 1.0 Scaffold project (package.json, deps, folder layout, config, README)
@@ -135,3 +137,27 @@ After Task 1.0 (scaffolding) is complete, **Track A (Task 2.0, naming)**, **Trac
   - [x] 13.2 Implement `promptOutputName` (text prompt with separator validation, blank → `processed`) and generalize `pickOutputDir` to a `baseName` parameter (default `"processed"`); wire the prompt into `main()` before resolution/confirmation. Run tests until they pass.
   - [x] 13.3 Update `README.md`: example run gains the output-folder prompt; note the blank → `processed` default and the numbered-fresh-folder behavior for custom names.
   - [x] 13.4 Run `pnpm verify`, smoke-run `node src/index.ts`, and commit in repo style.
+
+### Phase 2
+
+- [x] 14.0 Rename project to **squishify** + make the package publishable
+  - [x] 14.1 Rename the GitHub repo via `gh repo rename squishify --yes` (updates local `origin` to `git@github.com:SpacemanPete/squishify.git`; old URL redirects). Local folder `/home/void/dev/projects/squooshy` stays as-is — disk name doesn't affect git.
+  - [ ] 14.2 Update `package.json`: `"name": "squishify"`, `"version": "1.0.0"`, remove `"private": true`, `"license": "MIT"`, `"bin": { "squishify": "dist/index.js" }` (not `squish` — the bare name is an existing unrelated npm package (0.2.3) and the bins would collide on PATH for users with both installed globally), `"files": ["dist"]` (keeps `src/`, tests, `tasks/` out of the tarball; npm auto-includes README + LICENSE), `"main"`/`"types"`/`"exports"` pointing at `dist/index.js` / `dist/index.d.ts`, `"prepublishOnly": "pnpm verify"`, `"keywords"`, and `"repository"` = `https://github.com/SpacemanPete/squishify.git`.
+  - [ ] 14.3 Add `#!/usr/bin/env node` as line 1 of `src/index.ts` (tsc preserves it into `dist/index.js`) and change `intro("squooshy")` → `intro("squishify")`.
+  - [ ] 14.4 Rename all remaining `squooshy` references: `README.md` (title + body + new global-install section: `npm i -g squishify` → run `squishify`), `.agents/AGENTS-NODE.md` (2 refs), this file (1 ref), and the test temp-dir prefixes in `src/index.test.ts` (`squooshy-prompt-`), `src/pipeline.test.ts` (`squooshy-e2e-`), `src/process.test.ts` (`squooshy-test-` and `squooshy-write`).
+  - [ ] 14.5 Add `LICENSE` (MIT, 2026, Piotr Butkiewicz).
+  - [ ] 14.6 Run `pnpm verify` and smoke-run `node src/index.ts`, then commit in repo style.
+- [ ] 15.0 Programmatic API (`squishify(options)`) + `--help`/`--version` CLI flags (TDD)
+  - [ ] 15.1 Write failing tests in `src/index.test.ts` for `validateSquishifyOptions`/`squishify`: a validation table covering every bad input → throws `SquishifyConfigError` with a clear message (dir missing / not a directory / unreadable / no supported images; format not one of the **output** formats jpeg|webp|avif|png — note `SUPPORTED_EXTENSIONS` also contains read-only gif/tif; resize `axis` not width|height or `maxDimension` not a positive finite number; `capBytes` not a positive finite number; `prefix`/`suffix`/`outputName` containing `/`, `\`, or `..`; `onProgress` not a function; `signal` not an AbortSignal). Happy path: `squishify({ dir, format: "webp" })` returns a `BatchResult` with `outputDir` defaulting to `…/processed`. Custom `outputName` honored. `AbortSignal` already aborted → `status: "cancelled"`, nothing written; aborting mid-run stops between files. `onProgress` called once per file with correct counts. Validation collects ALL problems into one error. Run tests to confirm they fail.
+  - [ ] 15.2 Implement in `src/index.ts`: export `SquishifyOptions` (dir, format required; optional resize/capBytes/prefix/suffix/outputName/onProgress/signal), `class SquishifyConfigError extends Error`, `validateSquishifyOptions(options: unknown)` (collect-all-problems), and `squishify(options): Promise<BatchResult>` = validate → `pickOutputDir(dir, outputName)` → `runBatch(dir, outDir, config, { onProgress, isCancelled: () => signal?.aborted ?? false })`. Run tests until they pass.
+  - [ ] 15.3 Write failing tests in `src/index.test.ts` for the flags: `main(["--help"])` prints usage and returns without prompting; `main(["-h"])` same; `main(["--version"])`/`main(["-v"])` prints the version from `package.json` (resolved via `createRequire(import.meta.url)("../package.json")` — works from both `src/` and `dist/`); no flags → normal prompt flow (existing tests still pass with `main()` defaulting to `process.argv.slice(2)`). Run tests to confirm they fail.
+  - [ ] 15.4 Implement `main(argv = process.argv.slice(2))` handling `--help`/`-h` (usage text, exit 0) and `--version`/`-v` before any prompt. Run tests until they pass.
+  - [ ] 15.5 Update `README.md`: "Programmatic API" section — example with all options, options table with validation rules, `SquishifyConfigError` semantics, AbortSignal cancellation, `onProgress` shape, and a note that importing the module never triggers the CLI (`import.meta.main` guard). Document `squishify --help` / `--version` and exit codes (0 success, 0 intentional cancel, 1 fatal).
+  - [ ] 15.6 Run `pnpm verify` and smoke-run `node src/index.ts --version`, then commit in repo style.
+- [ ] 16.0 Build, verify, and publish to npm
+  - [ ] 16.1 Run `pnpm build`; confirm `dist/index.js` starts with `#!/usr/bin/env node`; `chmod +x dist/index.js`; smoke-run `./dist/index.js --version` and `node dist/index.js`.
+  - [ ] 16.2 Run `npm pack --dry-run` and confirm the tarball contains only `dist/`, `README.md`, `LICENSE`, `package.json` (no `src/`, tests, or `tasks/`).
+  - [ ] 16.3 Install locally for testing: `pnpm link --global`, then run `squishify --help` / `--version` from another directory.
+  - [ ] 16.4 User: `npm login` (2FA required — npm is phasing out non-2FA publishing) and `npm whoami`; then `npm publish` (first publish claims the `squishify` name — there is no pre-registration).
+  - [ ] 16.5 Verify the published artifact: `npm i -g squishify`, run `squishify` on a real image folder end-to-end.
+  - [ ] 16.6 Final `pnpm verify` and commit in repo style.

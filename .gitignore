@@ -2,3 +2,4 @@ node_modules/
 dist/
 coverage/
 .agents/session-transcripts/
+.opencode.json
