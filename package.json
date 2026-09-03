@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Interactive CLI that batch-processes a folder of images for a design -> product workflow",
   "license": "MIT",
+  "author": "Piotr Butkiewicz",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -12,7 +13,8 @@
     "squishify": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,6 +27,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/SpacemanPete/squishify.git"
+  },
+  "homepage": "https://github.com/SpacemanPete/squishify#readme",
+  "bugs": {
+    "url": "https://github.com/SpacemanPete/squishify/issues"
   },
   "keywords": [
     "image",
